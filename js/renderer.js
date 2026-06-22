@@ -65,6 +65,16 @@ function drawGameScreen() {
     draw.drawText(ctx, G.difficulty, badgeX + badgeW / 2, badgeY + badgeH / 2, 11, '#ffffff', 'center', true);
   }
 
+  if (G.currentLevelNum > 0) {
+    var levelText = '第 ' + G.currentLevelNum + ' 关';
+    var levelW = draw.measureText(ctx, levelText, 11) + 14;
+    var levelH = 20;
+    var levelX = cx - draw.measureText(ctx, titleText, 18) / 2 - levelW - 10;
+    var levelY = y + homeBtnR - levelH / 2;
+    draw.drawRoundRect(ctx, levelX, levelY, levelW, levelH, 8, C.cellNumber);
+    draw.drawText(ctx, levelText, levelX + levelW / 2, levelY + levelH / 2, 11, '#ffffff', 'center', true);
+  }
+
   y += homeBtnR * 2 + 10;
 
   if (G.currentMode === 'tutorial' || G.currentMode === 'adv-tutorial') {

@@ -6,6 +6,23 @@ G.ctx = G.canvas.getContext('2d');
 G.W = G.canvas.width;
 G.H = G.canvas.height;
 
+(function initSystemInfo() {
+  try {
+    var info = wx.getSystemInfoSync();
+    G.pixelRatio = info.pixelRatio || 1;
+    G.screenWidth = info.screenWidth;
+    G.screenHeight = info.screenHeight;
+    G.windowWidth = info.windowWidth;
+    G.windowHeight = info.windowHeight;
+    G.touchScaleX = G.W / info.windowWidth;
+    G.touchScaleY = G.H / info.windowHeight;
+  } catch (e) {
+    G.pixelRatio = 1;
+    G.touchScaleX = 1;
+    G.touchScaleY = 1;
+  }
+})();
+
 G.CONFIG = {
   bgColor: '#f2f3f5',
   cardBg: '#ffffff',
@@ -40,6 +57,11 @@ G.playerStats = {
   lastDate: new Date().toDateString()
 };
 
+G.settings = {
+  soundEnabled: true,
+  vibrationEnabled: true
+};
+
 G.tutorials = [
   { title: '教学 1/3', text: '点击数字块【2】，根据下方亮起的方向进行填色。', matrix: [[0,12,1,1,0]], solution: [{r:0, c:1, val:2, dir:'0,1'}] },
   { title: '教学 2/3', text: '光束会自动跳过数字块和已填满区域。先向下填【1】，再向右填【2】。', matrix: [[0,12,11,1,1],[0,0,1,0,0]], solution: [{r:0, c:2, val:1, dir:'1,0'}, {r:0, c:1, val:2, dir:'0,1'}] },
@@ -64,6 +86,7 @@ G.ROWS = 0;
 G.COLS = 0;
 G.currentMode = '';
 G.levelIndex = 0;
+G.currentLevelNum = 0;
 G.isAnimating = false;
 G.gameBoardOffsetX = 0;
 G.gameBoardOffsetY = 0;
@@ -75,3 +98,29 @@ G.btnRects = {};
 G.screenButtons = [];
 G.difficulty = '';
 G.difficultyColor = G.CONFIG.diffEasy;
+
+G.needsRedraw = true;
+G.markDirty = function() { G.needsRedraw = true; };
+
+G.cloneGrid = function(grid) {
+  var result = [];
+  for (var r = 0; r < grid.length; r++) {
+    var row = grid[r];
+    var newRow = [];
+    for (var c = 0; c < row.length; c++) {
+      var cell = row[c];
+      newRow.push({
+        type: cell.type,
+        value: cell.value,
+        used: cell.used,
+        r: cell.r,
+        c: cell.c,
+        hp: cell.hp,
+        seq: cell.seq,
+        animState: cell.animState
+      });
+    }
+    result.push(newRow);
+  }
+  return result;
+};

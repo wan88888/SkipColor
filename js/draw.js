@@ -1,4 +1,8 @@
+var NO_LINE_START_CHARS = '，。、；：！？）】》」』,.;:!?)]}';
+
 function drawRoundRect(ctx, x, y, w, h, r, color) {
+  if (w < 2 * r) r = w / 2;
+  if (h < 2 * r) r = h / 2;
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
@@ -48,14 +52,21 @@ function measureText(ctx, text, size) {
 
 function wrapText(ctx, text, maxWidth, lineHeight, size) {
   ctx.font = size + 'px sans-serif';
-  var words = text.split('');
   var lines = [];
   var currentLine = '';
-  for (var i = 0; i < words.length; i++) {
-    var testLine = currentLine + words[i];
-    if (ctx.measureText(testLine).width > maxWidth) {
+
+  for (var i = 0; i < text.length; i++) {
+    var ch = text[i];
+    var testLine = currentLine + ch;
+
+    if (ctx.measureText(testLine).width > maxWidth && currentLine.length > 0) {
+      if (NO_LINE_START_CHARS.indexOf(ch) !== -1 && currentLine.length > 0) {
+        lines.push(currentLine + ch);
+        currentLine = '';
+        continue;
+      }
       lines.push(currentLine);
-      currentLine = words[i];
+      currentLine = ch;
     } else {
       currentLine = testLine;
     }

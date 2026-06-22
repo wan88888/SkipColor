@@ -1,45 +1,53 @@
 var G = GameGlobal;
 var C = G.CONFIG;
 
-function loadGridData(matrix) {
-  G.gridData = [];
-  G.initialGridData = [];
-  G.ROWS = matrix.length;
-  G.COLS = matrix[0].length;
+function makeCell(val, r, c) {
+  var cellObj = { type: 'void', value: 0, used: false, r: r, c: c };
+  if (val === 1) {
+    cellObj.type = 'empty';
+  } else if (val < 0) {
+    cellObj.type = 'ice';
+    cellObj.hp = Math.abs(val);
+  } else if (val >= 10) {
+    cellObj.type = 'number';
+    cellObj.value = val - 10;
+  }
+  return cellObj;
+}
 
-  for (var r = 0; r < G.ROWS; r++) {
-    var row = [], initRow = [];
-    for (var c = 0; c < G.COLS; c++) {
-      var val = matrix[r][c];
-      var cellObj = { type: 'void', value: 0, used: false, r: r, c: c };
-      if (val === 1) {
-        cellObj.type = 'empty';
-      } else if (val < 0) {
-        cellObj.type = 'ice';
-        cellObj.hp = Math.abs(val);
-      } else if (val >= 10) {
-        cellObj.type = 'number';
-        cellObj.value = val - 10;
-      }
-
-      var stepIndex = -1;
-      for (var si = 0; si < G.currentSolution.length; si++) {
-        if (G.currentSolution[si].r === r && G.currentSolution[si].c === c) {
-          stepIndex = si;
+function attachSeqNumbers(cells, solution) {
+  for (var r = 0; r < cells.length; r++) {
+    for (var c = 0; c < cells[r].length; c++) {
+      var cellObj = cells[r][c];
+      for (var si = 0; si < solution.length; si++) {
+        if (solution[si].r === r && solution[si].c === c) {
+          cellObj.seq = si + 1;
           break;
         }
       }
-      if (stepIndex !== -1) cellObj.seq = stepIndex + 1;
-
-      row.push(cellObj);
-      initRow.push(JSON.parse(JSON.stringify(cellObj)));
     }
-    G.gridData.push(row);
-    G.initialGridData.push(initRow);
   }
+}
 
+function loadGridData(matrix) {
+  G.ROWS = matrix.length;
+  G.COLS = matrix[0].length;
+
+  var grid = [];
+  for (var r = 0; r < G.ROWS; r++) {
+    var row = [];
+    for (var c = 0; c < G.COLS; c++) {
+      row.push(makeCell(matrix[r][c], r, c));
+    }
+    grid.push(row);
+  }
+  attachSeqNumbers(grid, G.currentSolution);
+
+  G.gridData = grid;
+  G.initialGridData = G.cloneGrid(grid);
   G.selectedCell = null;
   G.historyStack = [];
+  G.markDirty();
 }
 
 function generateAndCropLevel() {
@@ -216,8 +224,8 @@ function applyIceObstacles() {
 
           if (isTriple) {
             var a1 = candidates[0], a2 = candidates[1];
-            G.gridData[a1.r][a1.c] = { type: 'number', value: 1 };
-            G.gridData[a2.r][a2.c] = { type: 'number', value: 1 };
+            G.gridData[a1.r][a1.c] = makeCell(11, a1.r, a1.c);
+            G.gridData[a2.r][a2.c] = makeCell(11, a2.r, a2.c);
             cell.type = 'ice';
             cell.hp = 3;
 
@@ -230,7 +238,7 @@ function applyIceObstacles() {
           } else {
             var a1 = candidates[0];
             var aVal = Math.floor(Math.random() * 2) + 1;
-            G.gridData[a1.r][a1.c] = { type: 'number', value: aVal };
+            G.gridData[a1.r][a1.c] = makeCell(10 + aVal, a1.r, a1.c);
             cell.type = 'ice';
             cell.hp = aVal + 1;
 
@@ -256,19 +264,9 @@ function applyIceObstacles() {
 
   G.currentSolution = extraSteps.concat(G.currentSolution);
 
-  var newMatrix = [];
-  for (var r = 0; r < G.ROWS; r++) {
-    var row = [];
-    for (var c = 0; c < G.COLS; c++) {
-      var cell = G.gridData[r][c];
-      if (cell.type === 'void') row.push(0);
-      else if (cell.type === 'empty') row.push(1);
-      else if (cell.type === 'ice') row.push(-cell.hp);
-      else if (cell.type === 'number') row.push(10 + cell.value);
-    }
-    newMatrix.push(row);
-  }
-  loadGridData(newMatrix);
+  attachSeqNumbers(G.gridData, G.currentSolution);
+  G.initialGridData = G.cloneGrid(G.gridData);
+  G.markDirty();
 }
 
 module.exports = {

@@ -1,0 +1,22 @@
+{
+  "libVersion": "3.16.1",
+  "projectname": "%E8%B7%B3%E8%B7%83%E5%A1%AB%E8%89%B2",
+  "condition": {},
+  "setting": {
+    "urlCheck": true,
+    "coverView": false,
+    "lazyloadPlaceholderEnable": false,
+    "skylineRenderEnable": false,
+    "preloadBackgroundData": false,
+    "autoAudits": false,
+    "useApiHook": true,
+    "showShadowRootInWxmlPanel": false,
+    "useStaticServer": false,
+    "useLanDebug": false,
+    "showES6CompileOption": false,
+    "compileHotReLoad": true,
+    "checkInvalidKey": true,
+    "ignoreDevUnusedFiles": true,
+    "bigPackageSizeSupport": false
+  }
+}

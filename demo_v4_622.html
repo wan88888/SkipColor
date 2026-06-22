@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>跳跃填色 - 进阶多模块版</title>
+    <style>
+        :root {
+            --bg-color: #f2f3f5;       
+            --card-bg: #ffffff;        
+            --text-main: #4a4f56;      
+            --text-sub: #848a93;       
+            
+            --grid-void: transparent;  
+            --cell-empty: #e4e7eb;     
+            --cell-filled: #9cb1a5;    
+            --cell-number: #7a8b98;    
+            --cell-number-text: #ffffff;
+            
+            --accent-color: #d19a8b;   
+            --btn-disabled: #dcdfe6;
+            --btn-disabled-text: #a8abb2;
+            
+            --radius-lg: 20px;
+            --radius-md: 12px;
+            --shadow-soft: 0 8px 24px rgba(122, 139, 152, 0.12);
+            
+            --diff-easy: #9cb1a5;      
+            --diff-medium: #dcb582;    
+            --diff-hard: #d19a8b;      
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 0; color: var(--text-main); user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+        }
+
+        .screen { display: none; width: 100%; max-width: 500px; padding: 30px 15px; box-sizing: border-box; flex-direction: column; align-items: center; }
+        .screen.active { display: flex; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from {opacity: 0; transform: translateY(10px);} to {opacity: 1; transform: translateY(0);} }
+
+        /* ====== 主页及菜单样式 ====== */
+        .home-title { font-size: 36px; font-weight: 800; color: var(--text-main); margin: 40px 0 10px 0; letter-spacing: 2px;}
+        .home-subtitle { font-size: 15px; color: var(--text-sub); margin-bottom: 50px; text-align: center;}
+        
+        .menu-list { width: 100%; display: flex; flex-direction: column; gap: 15px; }
+        .menu-btn {
+            background: var(--card-bg); border: none; border-radius: var(--radius-lg);
+            padding: 20px; font-size: 18px; font-weight: bold; color: var(--text-main);
+            box-shadow: var(--shadow-soft); cursor: pointer; transition: all 0.2s;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .menu-btn:active:not(:disabled) { transform: scale(0.97); }
+        .menu-btn:disabled { background: var(--cell-empty); color: var(--btn-disabled-text); cursor: not-allowed; box-shadow: none;}
+        .menu-btn .lock-icon { font-size: 16px; opacity: 0.5; }
+
+        /* ====== 游戏内样式 ====== */
+        .header { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; position: relative;}
+        .btn-home { background: transparent; border: none; font-size: 24px; cursor: pointer; color: var(--text-main); width: 40px; text-align: left; padding: 0;}
+        .game-title { font-size: 20px; font-weight: 800; margin: 0; flex: 1; text-align: center;}
+        
+        .difficulty-badge {
+            font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 8px;
+            color: white; letter-spacing: 0.5px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            display: none; width: fit-content; min-width: 50px; text-align: center; box-sizing: border-box;
+        }
+
+        .tutorial-text { font-size: 14px; color: var(--text-sub); text-align: center; margin-bottom: 15px; line-height: 1.5; min-height: 42px;}
+
+        .game-card {
+            background: var(--card-bg); border-radius: var(--radius-lg); padding: 15px;
+            box-shadow: var(--shadow-soft); display: flex; justify-content: center; align-items: center;
+            margin-bottom: 25px; width: 100%; box-sizing: border-box; min-height: 300px;
+        }
+
+        #game-board { display: grid; gap: 6px; position: relative; justify-content: center;}
+
+        .cell {
+            width: min(11vw, 40px); height: min(11vw, 40px); border-radius: 10px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 20px; font-weight: bold; box-sizing: border-box;
+            transition: transform 0.2s, background-color 0.3s ease, opacity 0.3s ease; position: relative;
+        }
+
+        .cell::after {
+            content: attr(data-seq); display: none; position: absolute; top: -6px; right: -6px;
+            background-color: var(--accent-color); color: white; width: 18px; height: 18px; border-radius: 50%;
+            font-size: 11px; font-weight: 800; align-items: center; justify-content: center;
+            box-shadow: 0 2px 6px rgba(209, 154, 139, 0.4); z-index: 10;
+        }
+        #game-board.show-hints .cell[data-seq]::after { display: flex; }
+
+        .void { background-color: var(--grid-void); }
+        
+        /* 还原为最初版本 */
+        .empty { background-color: var(--cell-empty); box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+        .filled { background-color: var(--cell-filled); color: white; transform: scale(0.95); }
+        
+        @keyframes popIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            60% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 1; }
+        }
+        .pop-anim { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.27) forwards !important; }
+
+        .number { background-color: var(--cell-number); color: var(--cell-number-text); cursor: pointer; box-shadow: 0 4px 8px rgba(122, 139, 152, 0.3); }
+        
+        /* 还原为最初版本 */
+        .number.used { opacity: 0.3; cursor: default; box-shadow: none; transform: scale(0.95);}
+        .number.selected { box-shadow: 0 0 0 3px rgba(209, 154, 139, 0.5); transform: scale(1.08); z-index: 5; background-color: var(--text-main); }
+        
+        .ice { color: white; box-shadow: inset 0 0 10px rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.2); transition: background-color 0.25s ease;}
+        .ice-hp-1 { background-color: #abc4d9; } 
+        .ice-hp-2 { background-color: #7da0c1; } 
+        .ice-hp-3 { background-color: #5b84a9; } 
+        
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-4px) rotate(-3deg); }
+            50% { transform: translateX(4px) rotate(3deg); }
+            75% { transform: translateX(-4px) rotate(-3deg); }
+            100% { transform: translateX(0); }
+        }
+        .ice-hit { animation: shake 0.2s ease-in-out; }
+
+        .controls { display: grid; grid-template-columns: 50px 50px 50px; grid-template-rows: 50px 50px; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        .btn-dir { width: 50px; height: 50px; border-radius: 50%; border: none; background-color: var(--card-bg); color: var(--text-main); font-size: 20px; cursor: pointer; box-shadow: var(--shadow-soft); transition: all 0.1s; display: flex; justify-content: center; align-items: center;}
+        #btn-up { grid-column: 2; grid-row: 1; }
+        #btn-left { grid-column: 1; grid-row: 2; }
+        #btn-down { grid-column: 2; grid-row: 2; }
+        #btn-right { grid-column: 3; grid-row: 2; }
+        .btn-dir:active:not(:disabled) { transform: scale(0.9); }
+        .btn-dir:disabled { background-color: var(--btn-disabled); box-shadow: none; color: rgba(255,255,255,0.8); cursor: not-allowed; }
+
+        .sys-controls { display: flex; gap: 10px; width: 100%; justify-content: space-between; flex-wrap: wrap;}
+        .sys-btn { flex: 1; min-width: 30%; padding: 12px 0; border: none; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center;}
+        .sys-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-reset { background-color: #e4e7eb; color: var(--text-main); }
+        .btn-undo { background-color: #e4e7eb; color: var(--text-main); }
+        .btn-hint { background-color: var(--cell-number); color: white; box-shadow: 0 4px 10px rgba(122, 139, 152, 0.2); }
+        .btn-hint.active { background-color: var(--accent-color); }
+
+        #message { margin-top: 20px; font-size: 18px; font-weight: bold; text-align: center; min-height: 25px; transition: color 0.3s;}
+        #btn-next { display: none; background-color: var(--cell-filled); width: 100%; padding: 15px 0; font-size: 16px; margin-top: 15px; border-radius: 25px; border: none; cursor: pointer; color: white; font-weight: bold; box-shadow: 0 6px 16px rgba(156, 177, 165, 0.4); animation: float 2s infinite;}
+        @keyframes float { 0% {transform: translateY(0);} 50% {transform: translateY(-4px);} 100% {transform: translateY(0);} }
+
+        #hint-panel { display: none; width: 100%; margin-top: 15px; background: var(--card-bg); border-radius: var(--radius-md); padding: 15px; box-sizing: border-box; box-shadow: var(--shadow-soft); }
+        .hint-step { padding: 8px 10px; margin-bottom: 6px; border-radius: 6px; background-color: var(--bg-color); font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+        .hint-badge { background: var(--accent-color); color: white; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; }
+        
+        .coming-soon-box { text-align: center; padding: 50px 20px; }
+    </style>
+</head>
+<body>
+
+    <div id="screen-home" class="screen active">
+        <div class="home-title">跳跃填色</div>
+        <div class="home-subtitle" id="daily-stats">您今天已经完成 0 关！</div>
+        
+        <div class="menu-list">
+            <button class="menu-btn" onclick="startGame('tutorial')">
+                <span>📖 基础教学</span> <span>▶</span>
+            </button>
+            <button class="menu-btn" id="btn-mode-normal" onclick="startGame('normal')">
+                <span>🎮 普通关卡</span> <span class="lock-icon" id="lock-normal"></span>
+            </button>
+            <button class="menu-btn" id="btn-mode-adv-menu" onclick="switchScreen('adv-modes')">
+                <span>🔥 进阶关卡</span> <span class="lock-icon" id="lock-adv-menu"></span>
+            </button>
+        </div>
+        <button onclick="clearData()" style="margin-top: 30px; background: none; border: none; color: var(--text-sub); font-size: 13px; text-decoration: underline; cursor: pointer;">
+            清除游戏进度
+        </button>
+    </div>
+
+    <div id="screen-adv-modes" class="screen">
+        <div class="home-title" style="font-size: 28px; margin-top: 20px;">进阶模式</div>
+        <div class="home-subtitle">选择您要挑战的特殊机制</div>
+        
+        <div class="menu-list">
+            <button class="menu-btn" onclick="switchScreen('adv-ice-menu')">
+                <span>🧊 冰块融化</span> <span>▶</span>
+            </button>
+            <button class="menu-btn" onclick="switchScreen('coming-soon')">
+                <span>✨ 更多关卡</span> <span>▶</span>
+            </button>
+            <button class="menu-btn" style="justify-content: center; background: var(--cell-empty); margin-top: 20px;" onclick="switchScreen('home')">
+                返回主页
+            </button>
+        </div>
+    </div>
+
+    <div id="screen-adv-ice-menu" class="screen">
+        <div class="home-title" style="font-size: 28px; margin-top: 20px;">冰块融化</div>
+        <div class="home-subtitle">需要多重交叉配合才能击碎的冰块</div>
+        
+        <div class="menu-list">
+            <button class="menu-btn" onclick="startGame('adv-tutorial')">
+                <span>📖 冰块教学</span> <span>▶</span>
+            </button>
+            <button class="menu-btn" id="btn-mode-adv" onclick="startGame('advanced')">
+                <span>🎮 正式关卡</span> <span class="lock-icon" id="lock-adv"></span>
+            </button>
+            <button class="menu-btn" style="justify-content: center; background: var(--cell-empty); margin-top: 20px;" onclick="switchScreen('adv-modes')">
+                返回机制列表
+            </button>
+        </div>
+    </div>
+
+    <div id="screen-coming-soon" class="screen">
+        <div class="coming-soon-box">
+            <h2 style="color: var(--cell-number); font-size: 28px; margin-bottom: 20px;">Coming Soon...</h2>
+            <p style="color: var(--text-sub); margin-bottom: 40px;">更多进阶机制正在紧锣密鼓地制作中！</p>
+            <button class="sys-btn btn-hint" style="padding: 15px 40px; font-size: 16px; margin: 0 auto;" onclick="switchScreen('adv-modes')">返回</button>
+        </div>
+    </div>
+
+    <div id="screen-game" class="screen">
+        <div class="header">
+            <button class="btn-home" onclick="goHome()">🏠</button>
+            <div class="game-title" id="game-title">关卡加载中...</div>
+            <div class="difficulty-badge" id="difficulty-badge">EASY</div>
+        </div>
+        <div class="tutorial-text" id="tutorial-text"></div>
+
+        <div class="game-card">
+            <div id="game-board"></div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-dir" id="btn-up" onclick="move(-1, 0)" disabled>↑</button>
+            <button class="btn-dir" id="btn-left" onclick="move(0, -1)" disabled>←</button>
+            <button class="btn-dir" id="btn-down" onclick="move(1, 0)" disabled>↓</button>
+            <button class="btn-dir" id="btn-right" onclick="move(0, 1)" disabled>→</button>
+        </div>
+
+        <div class="sys-controls">
+            <button class="sys-btn btn-reset" id="btn-reset" onclick="resetCurrentLevel()">🔄 重开</button>
+            <button class="sys-btn btn-undo" id="btn-undo" onclick="undoMove()" disabled>↩️ 撤销</button>
+            <button class="sys-btn btn-hint" id="btn-hint-toggle" onclick="toggleHint()">💡 提示</button>
+        </div>
+
+        <div id="message"></div>
+        <button id="btn-next" onclick="nextLevel()">进入下一关</button>
+
+        <div id="hint-panel"><div id="hint-list"></div></div>
+    </div>
+
+<script>
+    const dirMapText = {'-1,0': '上 ↑', '1,0': '下 ↓', '0,-1': '左 ←', '0,1': '右 →'};
+    
+    let gridData = [], initialGridData = [], currentSolution = []; 
+    let selectedCell = null, isHintVisible = false;
+    let historyStack = []; 
+    let ROWS = 0, COLS = 0; 
+    let currentMode = '', levelIndex = 0;
+    
+    let isAnimating = false;
+    const ANIM_SPEED = 180; 
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // 新增 advClearedCount 记录进阶关卡的通关总数
+    let playerStats = { 
+        tutorialCleared: false, 
+        normalClearedCount: 0, 
+        advTutorialCleared: false, 
+        advClearedCount: 0, 
+        lastDate: new Date().toDateString() 
+    };
+
+    const tutorialLevels = [
+        { title: "教学 1/3", text: "点击数字块【2】，根据下方亮起的方向进行填色。", matrix: [[0,12,1,1,0]], solution: [{r:0, c:1, val:2, dir:'0,1'}] },
+        { title: "教学 2/3", text: "光束会自动跳过数字块和已填满区域。先向下填【1】，再向右填【2】。", matrix: [[0,12,11,1,1],[0,0,1,0,0]], solution: [{r:0, c:2, val:1, dir:'1,0'}, {r:0, c:1, val:2, dir:'0,1'}] },
+        { title: "教学 3/3", text: "十字交叉时，顺序决定成败。如果陷入死局，撤销或重开即可。", matrix: [[0,11,0], [12,1,1], [0,1,0]], solution: [{r:1, c:0, val:2, dir:'0,1'}, {r:0, c:1, val:1, dir:'1,0'}] }
+    ];
+
+    const advTutorialLevels = [
+        { 
+            title: "冰块教学 1/2", 
+            text: "冰块会阻挡光束！点击【4】向右：先填满第1格(耗1)，遇到冰块破冰(耗2)，最后剩1点正好填满刚融化的冰块位！", 
+            matrix: [[0, 14, 1, -2, 0]], 
+            solution: [{r:0, c:1, val:4, dir:'0,1'}] 
+        },
+        { 
+            title: "冰块教学 2/2", 
+            text: "【交叉消除】点击下方【1】向上削弱冰块，再用左侧【3】向右彻底击碎并完成最后两格的填色！", 
+            matrix: [[13, 1, -2, 0], [0, 0, 11, 0]], 
+            solution: [{r:1, c:2, val:1, dir:'-1,0'}, {r:0, c:0, val:3, dir:'0,1'}] 
+        }
+    ];
+
+    window.onload = initApp;
+
+    function initApp() {
+        let savedStats = JSON.parse(localStorage.getItem('jumpColorStats'));
+        if (savedStats) {
+            // 每日零点重置挑战数量
+            if (savedStats.lastDate !== new Date().toDateString()) {
+                savedStats.normalClearedCount = 0; 
+                savedStats.advClearedCount = 0; 
+                savedStats.lastDate = new Date().toDateString();
+            }
+            // 兼容旧玩家数据，若无进阶总数统计则初始化为0
+            if (typeof savedStats.advClearedCount === 'undefined') savedStats.advClearedCount = 0;
+            
+            playerStats = { ...playerStats, ...savedStats };
+        } else saveStats();
+        updateHomeUI(); switchScreen('home');
+    }
+
+    function saveStats() { localStorage.setItem('jumpColorStats', JSON.stringify(playerStats)); }
+
+    function clearData() {
+        if (confirm("⚠️ 确定要清除所有游戏进度吗？\n清除后您的通关记录将归零，并需要重新完成教学关卡。")) {
+            playerStats = { tutorialCleared: false, normalClearedCount: 0, advTutorialCleared: false, advClearedCount: 0, lastDate: new Date().toDateString() };
+            saveStats(); updateHomeUI();
+        }
+    }
+
+    function updateHomeUI() {
+        // 总关卡数为 普通关卡数 + 进阶正式关卡数
+        let totalDaily = playerStats.normalClearedCount + playerStats.advClearedCount;
+        document.getElementById('daily-stats').innerText = `您今天已经完成 ${totalDaily} 关！`;
+        
+        let btnNormal = document.getElementById('btn-mode-normal');
+        let btnAdvMenu = document.getElementById('btn-mode-adv-menu');
+        let btnAdvNormal = document.getElementById('btn-mode-adv');
+        
+        if (playerStats.tutorialCleared) {
+            btnNormal.disabled = false; document.getElementById('lock-normal').innerText = '▶';
+        } else {
+            btnNormal.disabled = true; document.getElementById('lock-normal').innerText = '🔒 需通关教学';
+        }
+
+        if (playerStats.normalClearedCount > 0) { 
+            btnAdvMenu.disabled = false; document.getElementById('lock-adv-menu').innerText = '▶';
+        } else {
+            btnAdvMenu.disabled = true; document.getElementById('lock-adv-menu').innerText = '🔒 需通关普通';
+        }
+
+        if (playerStats.advTutorialCleared) {
+            btnAdvNormal.disabled = false; document.getElementById('lock-adv').innerText = '▶';
+        } else {
+            btnAdvNormal.disabled = true; document.getElementById('lock-adv').innerText = '🔒 需通关教学';
+        }
+    }
+
+    function switchScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById('screen-' + screenId).classList.add('active');
+    }
+
+    function goHome() {
+        if (historyStack.length > 0 || document.getElementById('btn-next').style.display === 'block') {
+            if(!confirm("是否要返回主页？您的当前关卡进度将无法保存。")) return;
+        }
+        updateHomeUI(); 
+        switchScreen('home');
+    }
+
+    function startGame(mode) {
+        currentMode = mode;
+        levelIndex = 0; 
+        switchScreen('game'); 
+        loadLevel();
+    }
+
+    function loadLevel() {
+        isHintVisible = false; historyStack = []; isAnimating = false;
+        updateHintUI(); document.getElementById('btn-next').style.display = 'none'; document.getElementById('message').innerText = "";
+        
+        if (currentMode === 'tutorial') {
+            let tData = tutorialLevels[levelIndex];
+            document.getElementById('game-title').innerText = tData.title;
+            document.getElementById('tutorial-text').innerText = tData.text;
+            document.getElementById('tutorial-text').style.display = 'block';
+            document.getElementById('difficulty-badge').style.display = 'none';
+            currentSolution = JSON.parse(JSON.stringify(tData.solution)); loadGridData(tData.matrix);
+        } else if (currentMode === 'adv-tutorial') {
+            let tData = advTutorialLevels[levelIndex];
+            document.getElementById('game-title').innerText = tData.title;
+            document.getElementById('tutorial-text').innerText = tData.text;
+            document.getElementById('tutorial-text').style.display = 'block';
+            document.getElementById('difficulty-badge').style.display = 'none';
+            currentSolution = JSON.parse(JSON.stringify(tData.solution)); loadGridData(tData.matrix);
+        } else {
+            document.getElementById('game-title').innerText = currentMode === 'advanced' ? "正式关卡" : "普通关卡";
+            document.getElementById('tutorial-text').style.display = 'none';
+            generateAndCropLevel();
+        }
+    }
+
+    function nextLevel() {
+        if (currentMode === 'tutorial') {
+            levelIndex++;
+            if (levelIndex >= tutorialLevels.length) {
+                playerStats.tutorialCleared = true; saveStats();
+                alert("🎉 恭喜完成基础教学！已解锁普通关卡！");
+                currentMode = 'normal'; levelIndex = 0;
+            }
+        } else if (currentMode === 'adv-tutorial') {
+            levelIndex++;
+            if (levelIndex >= advTutorialLevels.length) {
+                playerStats.advTutorialCleared = true; saveStats();
+                alert("🧊 恭喜完成冰块教学！已解锁正式关卡！");
+                currentMode = 'advanced'; levelIndex = 0;
+            }
+        } else {
+            // 普通关和进阶正式关通关时分别计数
+            if (currentMode === 'normal') playerStats.normalClearedCount++; 
+            if (currentMode === 'advanced') playerStats.advClearedCount++;
+            saveStats();
+        }
+        loadLevel();
+    }
+
+    function generateAndCropLevel() {
+        const SIM_SIZE = 8; 
+        let simGrid = Array.from({length: SIM_SIZE}, () => Array(SIM_SIZE).fill(0));
+        let generatedSteps = []; 
+        let targetBlocks = Math.floor(Math.random() * 4) + 4; 
+        let totalOverlapEvents = 0; 
+
+        for (let b = 0; b < targetBlocks; b++) {
+            let possibleMoves = [];
+            for (let r = 0; r < SIM_SIZE; r++) {
+                for (let c = 0; c < SIM_SIZE; c++) {
+                    if (simGrid[r][c] !== 0) continue; 
+                    let dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                    for (let dir of dirs) {
+                        for (let L = 1; L <= 5; L++) { 
+                            let currR = r, currC = c, foundVoids = [], jumpedCount = 0, valid = true;
+                            while (foundVoids.length < L) {
+                                currR += dir[0]; currC += dir[1];
+                                if (currR < 0 || currR >= SIM_SIZE || currC < 0 || currC >= SIM_SIZE) { valid = false; break; }
+                                if (simGrid[currR][currC] === 0) foundVoids.push({r: currR, c: currC});
+                                else jumpedCount++; 
+                            }
+                            if (valid && foundVoids.length === L) {
+                                let isConnected = (b === 0);
+                                if (!isConnected) {
+                                    if (jumpedCount > 0) isConnected = true; 
+                                    else {
+                                        let adj = [[-1,0],[1,0],[0,-1],[0,1]];
+                                        for(let a of adj){
+                                            let ar = r+a[0], ac = c+a[1];
+                                            if(ar>=0 && ar<SIM_SIZE && ac>=0 && ac<SIM_SIZE && simGrid[ar][ac]!==0) { isConnected = true; break; }
+                                        }
+                                    }
+                                }
+                                if (isConnected) possibleMoves.push({ start: {r, c}, dir, L, foundVoids, jumpedCount });
+                            }
+                        }
+                    }
+                }
+            }
+            if (possibleMoves.length === 0) break;
+            
+            possibleMoves.sort((a, b) => b.jumpedCount - a.jumpedCount);
+            let maxJumps = possibleMoves[0].jumpedCount;
+            let topMoves = possibleMoves.filter(m => m.jumpedCount >= Math.max(0, maxJumps - 1)); 
+            let chosenMove = topMoves[Math.floor(Math.random() * topMoves.length)];
+
+            if (chosenMove.jumpedCount > 0) {
+                totalOverlapEvents += 1;
+            }
+
+            simGrid[chosenMove.start.r][chosenMove.start.c] = 10 + chosenMove.L; 
+            for (let v of chosenMove.foundVoids) simGrid[v.r][v.c] = 1; 
+            
+            generatedSteps.push({ r: chosenMove.start.r, c: chosenMove.start.c, val: chosenMove.L, dir: `${chosenMove.dir[0]},${chosenMove.dir[1]}`, foundVoids: chosenMove.foundVoids });
+        }
+
+        let diffScore = (generatedSteps.length * 1.5) + (totalOverlapEvents * 3.0);
+        let badge = document.getElementById('difficulty-badge');
+        badge.style.display = 'block';
+        
+        if (diffScore <= 13) {
+            badge.innerText = 'EASY'; badge.style.backgroundColor = 'var(--diff-easy)';
+        } else if (diffScore <= 20) {
+            badge.innerText = 'MEDIUM'; badge.style.backgroundColor = 'var(--diff-medium)';
+        } else {
+            badge.innerText = 'HARD'; badge.style.backgroundColor = 'var(--diff-hard)';
+        }
+
+        let minR = SIM_SIZE, maxR = -1, minC = SIM_SIZE, maxC = -1;
+        for(let r=0; r<SIM_SIZE; r++){
+            for(let c=0; c<SIM_SIZE; c++){
+                if(simGrid[r][c] !== 0) {
+                    if(r < minR) minR = r; if(r > maxR) maxR = r;
+                    if(c < minC) minC = c; if(c > maxC) maxC = c;
+                }
+            }
+        }
+        let croppedGrid = [];
+        for(let r=minR; r<=maxR; r++){
+            let row = [];
+            for(let c=minC; c<=maxC; c++) row.push(simGrid[r][c]);
+            croppedGrid.push(row);
+        }
+
+        generatedSteps.forEach(s => { 
+            s.r -= minR; s.c -= minC; 
+            if(s.foundVoids) s.foundVoids.forEach(v => { v.r -= minR; v.c -= minC; });
+        });
+        currentSolution = generatedSteps; 
+        
+        loadGridData(croppedGrid);
+        if (currentMode === 'advanced') applyIceObstacles();
+    }
+
+    function getAttackerCandidates(targetR, targetC) {
+        let candidates = [];
+        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (let d of dirs) {
+            let dr = d[0], dc = d[1];
+            let r = targetR + dr, c = targetC + dc;
+            while (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                let cell = gridData[r][c];
+                if (cell.type === 'empty' || cell.type === 'ice') break;
+                if (cell.type === 'void') {
+                    candidates.push({ r: r, c: c, dir: `${-dr},${-dc}` });
+                    break;
+                }
+                r += dr; c += dc;
+            }
+        }
+        return candidates;
+    }
+
+    function applyIceObstacles() {
+        let maxIce = Math.floor(Math.random() * 3) + 2; 
+        let iceAdded = 0;
+        let shuffledSteps = [...currentSolution].sort(() => Math.random() - 0.5);
+        let extraSteps = []; 
+
+        for (let step of shuffledSteps) {
+            if (iceAdded >= maxIce) break;
+            if (step.foundVoids && step.foundVoids.length > 0) {
+                let target = step.foundVoids[Math.floor(Math.random() * step.foundVoids.length)];
+                let cell = gridData[target.r][target.c];
+
+                if (cell.type === 'empty') {
+                    let candidates = getAttackerCandidates(target.r, target.c);
+                    let isMulti = candidates.length > 0 && Math.random() > 0.3;
+
+                    if (isMulti) {
+                        candidates.sort(() => Math.random() - 0.5);
+                        let isTriple = candidates.length >= 2 && Math.random() > 0.4;
+                        
+                        if (isTriple) {
+                            let a1 = candidates[0], a2 = candidates[1];
+                            gridData[a1.r][a1.c] = { type: 'number', value: 1 };
+                            gridData[a2.r][a2.c] = { type: 'number', value: 1 };
+                            cell.type = 'ice'; cell.hp = 3;
+                            
+                            let sourceCell = gridData[step.r][step.c];
+                            sourceCell.value += 1;
+                            step.val += 1;
+                            
+                            extraSteps.push({r: a1.r, c: a1.c, val: 1, dir: a1.dir});
+                            extraSteps.push({r: a2.r, c: a2.c, val: 1, dir: a2.dir});
+                        } else {
+                            let a1 = candidates[0];
+                            let aVal = Math.floor(Math.random() * 2) + 1; 
+                            gridData[a1.r][a1.c] = { type: 'number', value: aVal };
+                            
+                            cell.type = 'ice'; cell.hp = aVal + 1;
+                            
+                            let sourceCell = gridData[step.r][step.c];
+                            sourceCell.value += 1;
+                            step.val += 1;
+                            
+                            extraSteps.push({r: a1.r, c: a1.c, val: aVal, dir: a1.dir});
+                        }
+                    } else {
+                        let hp = Math.floor(Math.random() * 3) + 1;
+                        cell.type = 'ice'; cell.hp = hp;
+
+                        let sourceCell = gridData[step.r][step.c];
+                        sourceCell.value += hp;
+                        step.val += hp;
+                    }
+                    iceAdded++;
+                }
+            }
+        }
+        
+        currentSolution = [...extraSteps, ...currentSolution];
+        
+        let newMatrix = [];
+        for(let r=0; r<ROWS; r++){
+            let row = [];
+            for(let c=0; c<COLS; c++){
+                let cell = gridData[r][c];
+                if(cell.type === 'void') row.push(0);
+                else if(cell.type === 'empty') row.push(1);
+                else if(cell.type === 'ice') row.push(-cell.hp);
+                else if(cell.type === 'number') row.push(10 + cell.value);
+            }
+            newMatrix.push(row);
+        }
+        loadGridData(newMatrix);
+    }
+
+    function loadGridData(matrix) {
+        gridData = []; initialGridData = [];
+        ROWS = matrix.length; COLS = matrix[0].length;
+        for (let r = 0; r < ROWS; r++) {
+            let row = [], initRow = [];
+            for (let c = 0; c < COLS; c++) {
+                let val = matrix[r][c];
+                let cellObj = { type: 'void', value: 0, used: false, r: r, c: c };
+                if (val === 1) { 
+                    cellObj.type = 'empty'; 
+                } else if (val < 0) { 
+                    cellObj.type = 'ice'; 
+                    cellObj.hp = Math.abs(val); 
+                } else if (val >= 10) { 
+                    cellObj.type = 'number'; 
+                    cellObj.value = val - 10; 
+                }
+                
+                let stepIndex = currentSolution.findIndex(s => s.r === r && s.c === c);
+                if (stepIndex !== -1) { cellObj.seq = stepIndex + 1; }
+                row.push({...cellObj}); initRow.push({...cellObj});
+            }
+            gridData.push(row); initialGridData.push(initRow);
+        }
+        selectedCell = null; historyStack = []; 
+        updateControlsState(); renderBoard();
+    }
+
+    function resetCurrentLevel() {
+        if(isAnimating) return; 
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) gridData[r][c] = {...initialGridData[r][c]};
+        }
+        selectedCell = null; historyStack = [];
+        document.getElementById('message').innerText = ""; document.getElementById('btn-next').style.display = 'none';
+        isHintVisible = false; updateHintUI(); updateControlsState(); renderBoard();
+    }
+
+    function saveHistory() { historyStack.push({ grid: JSON.parse(JSON.stringify(gridData)), selectedCell: selectedCell ? {...selectedCell} : null }); }
+
+    function undoMove() {
+        if (isAnimating || historyStack.length === 0) return; 
+        let lastState = historyStack.pop();
+        gridData = lastState.grid; selectedCell = lastState.selectedCell;
+        document.getElementById('message').innerText = ""; updateControlsState(); renderBoard();
+    }
+
+    function renderBoard() {
+        const board = document.getElementById('game-board');
+        board.innerHTML = '';
+        board.style.gridTemplateColumns = `repeat(${COLS}, min(11vw, 40px))`;
+        board.style.gridTemplateRows = `repeat(${ROWS}, min(11vw, 40px))`;
+
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                let cellData = gridData[r][c];
+                let div = document.createElement('div');
+                div.className = `cell ${cellData.type}`;
+                
+                if (cellData.seq) { div.setAttribute('data-seq', cellData.seq); }
+                
+                if (cellData.type === 'number') {
+                    div.innerText = cellData.value;
+                    if (cellData.used) div.classList.add('used');
+                    if (selectedCell && selectedCell.r === r && selectedCell.c === c) div.classList.add('selected');
+                    div.onclick = () => selectCell(r, c);
+                } else if (cellData.type === 'ice') {
+                    div.classList.add(`ice-hp-${cellData.hp}`);
+                    div.innerText = cellData.hp;
+                }
+                board.appendChild(div);
+            }
+        }
+    }
+
+    function toggleHint() { isHintVisible = !isHintVisible; updateHintUI(); }
+
+    function updateHintUI() {
+        const board = document.getElementById('game-board');
+        const btnToggle = document.getElementById('btn-hint-toggle');
+        const hintPanel = document.getElementById('hint-panel');
+        const hintList = document.getElementById('hint-list');
+
+        if (isHintVisible) {
+            board.classList.add('show-hints'); btnToggle.innerHTML = '隐藏'; btnToggle.classList.add('active');
+            hintList.innerHTML = '';
+            currentSolution.forEach((step, index) => {
+                let div = document.createElement('div'); div.className = 'hint-step';
+                div.innerHTML = `<div style="display:flex; align-items:center; gap:8px;"><span class="hint-badge">${index + 1}</span><span>数字 <b>${step.val}</b></span></div><strong>${dirMapText[step.dir]}</strong>`;
+                hintList.appendChild(div);
+            });
+            hintPanel.style.display = 'block';
+        } else {
+            board.classList.remove('show-hints'); btnToggle.innerHTML = '💡 提示'; btnToggle.classList.remove('active');
+            hintPanel.style.display = 'none';
+        }
+    }
+
+    function selectCell(r, c) {
+        if (isAnimating || gridData[r][c].used) return;
+        selectedCell = {r, c}; updateControlsState(); renderBoard();
+    }
+
+    function hasValidMove(dr, dc) {
+        if (!selectedCell) return false;
+        let currR = selectedCell.r, currC = selectedCell.c;
+        while (true) {
+            currR += dr; currC += dc;
+            if (currR < 0 || currR >= ROWS || currC < 0 || currC >= COLS) return false;
+            let targetCell = gridData[currR][currC];
+            if (targetCell.type === 'void') return false;
+            if (targetCell.type === 'empty' || targetCell.type === 'ice') return true; 
+        }
+    }
+
+    function updateControlsState() {
+        document.getElementById('btn-up').disabled = !hasValidMove(-1, 0) || isAnimating;
+        document.getElementById('btn-down').disabled = !hasValidMove(1, 0) || isAnimating;
+        document.getElementById('btn-left').disabled = !hasValidMove(0, -1) || isAnimating;
+        document.getElementById('btn-right').disabled = !hasValidMove(0, 1) || isAnimating;
+        
+        document.getElementById('btn-undo').disabled = (historyStack.length === 0) || isAnimating;
+        document.getElementById('btn-reset').disabled = isAnimating;
+    }
+
+    async function move(dr, dc) {
+        if (!selectedCell || isAnimating) return;
+        
+        isAnimating = true;
+        updateControlsState(); 
+        saveHistory(); 
+
+        let r = selectedCell.r, c = selectedCell.c, cell = gridData[r][c];
+        let targetCount = cell.value, filledCount = 0;
+        let currR = r, currC = c;
+
+        cell.used = true; 
+        selectedCell = null;
+        renderBoard(); 
+
+        const board = document.getElementById('game-board');
+
+        while (filledCount < targetCount) {
+            currR += dr; currC += dc;
+            if (currR < 0 || currR >= ROWS || currC < 0 || currC >= COLS) break; 
+            
+            let targetCell = gridData[currR][currC];
+            if (targetCell.type === 'void') break; 
+            if (targetCell.type === 'filled' || targetCell.type === 'number') continue;
+
+            let targetDiv = board.children[currR * COLS + currC];
+
+            if (targetCell.type === 'empty') { 
+                targetCell.type = 'filled'; 
+                filledCount++; 
+                
+                targetDiv.className = 'cell filled pop-anim';
+                await sleep(ANIM_SPEED);
+                
+            } else if (targetCell.type === 'ice') {
+                while (targetCell.type === 'ice' && filledCount < targetCount) {
+                    targetCell.hp--;
+                    filledCount++;
+                    
+                    targetDiv.classList.add('ice-hit');
+                    setTimeout(() => targetDiv.classList.remove('ice-hit'), ANIM_SPEED - 50);
+
+                    if (targetCell.hp > 0) {
+                        targetDiv.className = `cell ice ice-hp-${targetCell.hp} ice-hit`;
+                        targetDiv.innerText = targetCell.hp;
+                    } else {
+                        targetCell.type = 'empty';
+                        delete targetCell.hp;
+                        targetDiv.className = 'cell empty';
+                        targetDiv.innerText = '';
+                    }
+                    await sleep(ANIM_SPEED + 80); 
+                }
+                
+                if (targetCell.type === 'empty' && filledCount < targetCount) {
+                    targetCell.type = 'filled';
+                    filledCount++;
+                    targetDiv.className = 'cell filled pop-anim';
+                    await sleep(ANIM_SPEED);
+                }
+            }
+        }
+
+        isAnimating = false;
+        updateControlsState(); 
+        renderBoard(); 
+        checkGameState();
+    }
+
+    function checkGameState() {
+        let hasEmpty = false, hasUnusedNumbers = false;
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (gridData[r][c].type === 'empty' || gridData[r][c].type === 'ice') hasEmpty = true;
+                if (gridData[r][c].type === 'number' && !gridData[r][c].used) hasUnusedNumbers = true;
+            }
+        }
+
+        if (!hasEmpty) {
+            document.getElementById('message').innerText = "顺利通关！";
+            document.getElementById('message').style.color = "var(--cell-filled)";
+            document.getElementById('btn-next').style.display = 'block';
+            document.getElementById('btn-undo').disabled = true; 
+            if (isHintVisible) toggleHint(); 
+        } else if (!hasUnusedNumbers) {
+            document.getElementById('message').innerText = "陷入死局，请重新开始";
+            document.getElementById('message').style.color = "var(--accent-color)";
+            document.getElementById('btn-undo').disabled = true; 
+        }
+    }
+</script>
+</body>
+</html>

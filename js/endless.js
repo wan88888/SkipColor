@@ -4,6 +4,7 @@ var adaptive = require('./adaptive.js');
 
 var TIME_LIMIT = 180;
 var timerInterval = null;
+var timerPaused = false;
 
 function start() {
   G.currentMode = 'endless';
@@ -46,6 +47,7 @@ function onClear() {
 
 function startTimer() {
   stopTimer();
+  timerPaused = false;
   timerInterval = setInterval(function() {
     if (G.currentMode !== 'endless') {
       stopTimer();
@@ -63,6 +65,21 @@ function stopTimer() {
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
+  }
+  timerPaused = false;
+}
+
+function pauseTimer() {
+  if (G.currentMode === 'endless' && timerInterval) {
+    stopTimer();
+    timerPaused = true;
+  }
+}
+
+function resumeTimer() {
+  if (timerPaused && G.currentMode === 'endless' && G.currentScreen === 'game') {
+    timerPaused = false;
+    startTimer();
   }
 }
 
@@ -91,6 +108,8 @@ module.exports = {
   start: start,
   onClear: onClear,
   stopTimer: stopTimer,
+  pauseTimer: pauseTimer,
+  resumeTimer: resumeTimer,
   getTimeDisplay: getTimeDisplay,
   TIME_LIMIT: TIME_LIMIT
 };

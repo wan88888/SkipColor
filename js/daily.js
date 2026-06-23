@@ -14,8 +14,7 @@ function getDailySeed() {
   return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
 }
 
-function generateDailyPuzzle() {
-  var seed = getDailySeed();
+function generateDailyPuzzleFromSeed(seed) {
   G.dailySeed = seed;
   var rng = seededRandom(seed);
   var difficulty = 1 + Math.floor(rng() * 4);
@@ -23,7 +22,11 @@ function generateDailyPuzzle() {
   Math.random = rng;
   level.generateRandom(difficulty);
   Math.random = origRandom;
-  return { matrix: null, seed: seed, title: '每日挑战 #' + seed };
+  return { seed: seed, title: '每日挑战 #' + seed };
+}
+
+function generateDailyPuzzle() {
+  return generateDailyPuzzleFromSeed(getDailySeed());
 }
 
 function isDailyClearedToday() {
@@ -40,6 +43,7 @@ function markDailyCleared() {
 module.exports = {
   getDailySeed: getDailySeed,
   generateDailyPuzzle: generateDailyPuzzle,
+  generateDailyPuzzleFromSeed: generateDailyPuzzleFromSeed,
   isDailyClearedToday: isDailyClearedToday,
   markDailyCleared: markDailyCleared
 };

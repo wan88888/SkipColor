@@ -12,12 +12,13 @@ function drawScreenBase(title, subtitle) {
   var ctx = G.ctx;
   var W = G.W;
   var H = G.H;
+  var top = (G.layoutPad && G.layoutPad.top) || 20;
 
   ctx.fillStyle = C.bgColor;
   ctx.fillRect(0, 0, W, H);
 
   var cx = W / 2;
-  var y = 60;
+  var y = top + 24;
 
   draw.drawText(ctx, title, cx, y, 36, C.textMain, 'center', true);
   y += 50;
@@ -78,16 +79,18 @@ var screenHome = {
     var W = G.W;
     var cx = W / 2;
 
+    var top = (G.layoutPad && G.layoutPad.top) || 20;
+
     ctx.fillStyle = C.bgColor;
     ctx.fillRect(0, 0, W, G.H);
 
-    draw.drawText(ctx, '跳跃填色', cx, 60, 36, C.textMain, 'center', true);
+    draw.drawText(ctx, '跳跃填色', cx, top + 24, 36, C.textMain, 'center', true);
     var totalDaily = G.playerStats.todayNormalCleared + G.playerStats.todayAdvCleared;
     var progressText = '今日通关 ' + totalDaily + ' 关  ⭐ ' + G.playerStats.totalStars;
     if (G.playerStats.lifetimeNormalCleared < levelpack.NORMAL_LEVEL_COUNT) {
       progressText += '  ·  精编 ' + (G.playerStats.lifetimeNormalCleared + 1) + '/' + levelpack.NORMAL_LEVEL_COUNT;
     }
-    draw.drawText(ctx, progressText, cx, 95, 14, C.textSub, 'center');
+    draw.drawText(ctx, progressText, cx, top + 59, 14, C.textSub, 'center');
 
     G.screenButtons = [];
     scroll.beginDraw(ctx, 'home');
@@ -102,7 +105,7 @@ var screenHome = {
       { label: '📖 基础教学', sub: '▶', action: 'startTutorial' },
       { label: '🎮 普通关卡', sub: normalSub, action: G.playerStats.tutorialCleared ? 'startNormal' : null, disabled: !G.playerStats.tutorialCleared },
       { label: '🔥 进阶关卡', sub: G.playerStats.lifetimeNormalCleared > 0 ? '▶' : '🔒', action: G.playerStats.lifetimeNormalCleared > 0 ? 'goAdvModes' : null, disabled: G.playerStats.lifetimeNormalCleared === 0 },
-      { label: '📅 每日挑战', sub: daily.isDailyClearedToday() ? '✓今日' : '▶', action: 'startDaily' },
+      { label: '📅 每日挑战', sub: daily.isDailyClearedToday() ? '✓ 练习' : '▶', action: 'startDaily' },
       { label: '♾️ 无尽模式', sub: '最高:' + G.playerStats.endlessHighScore, action: 'startEndless' },
       { label: '🏆 成就', sub: achievements.getProgress().unlocked + '/' + achievements.getProgress().total, action: 'goAchievements' },
       { label: '🎨 主题', sub: G.THEMES[G.currentTheme].name, action: 'goThemes' },
@@ -181,11 +184,13 @@ var screenAchievements = {
     var W = G.W;
     var cx = W / 2;
 
+    var top = (G.layoutPad && G.layoutPad.top) || 20;
+
     ctx.fillStyle = C.bgColor;
     ctx.fillRect(0, 0, W, G.H);
 
-    draw.drawText(ctx, '成就', cx, 60, 36, C.textMain, 'center', true);
-    draw.drawText(ctx, achievements.getProgress().unlocked + '/' + achievements.getProgress().total + ' 已解锁', cx, 95, 15, C.textSub, 'center');
+    draw.drawText(ctx, '成就', cx, top + 24, 36, C.textMain, 'center', true);
+    draw.drawText(ctx, achievements.getProgress().unlocked + '/' + achievements.getProgress().total + ' 已解锁', cx, top + 59, 15, C.textSub, 'center');
 
     G.screenButtons = [];
     scroll.beginDraw(ctx, 'achievements');

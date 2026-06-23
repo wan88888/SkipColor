@@ -17,10 +17,17 @@ function setContentHeight(screen, height) {
   G._screenContentHeight[screen] = height;
 }
 
+function getViewMetrics() {
+  var pad = G.layoutPad || { scrollHeader: 110, bottom: 16 };
+  var viewTop = pad.scrollHeader;
+  var viewH = G.H - viewTop - pad.bottom;
+  return { viewTop: viewTop, viewH: viewH };
+}
+
 function getMaxScroll(screen) {
+  var metrics = getViewMetrics();
   var contentH = (G._screenContentHeight && G._screenContentHeight[screen]) || 0;
-  var viewH = G.H - 110;
-  return Math.max(0, contentH - viewH);
+  return Math.max(0, contentH - metrics.viewH);
 }
 
 function clamp(screen, value) {
@@ -33,15 +40,14 @@ function applyScroll(screen, deltaY) {
 }
 
 function beginDraw(ctx, screen) {
+  var metrics = getViewMetrics();
   var offset = getOffset(screen);
-  var viewTop = 110;
-  var viewH = G.H - viewTop;
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, viewTop, G.W, viewH);
+  ctx.rect(0, metrics.viewTop, G.W, metrics.viewH);
   ctx.clip();
   ctx.translate(0, -offset);
-  return { offset: offset, viewTop: viewTop };
+  return { offset: offset, viewTop: metrics.viewTop };
 }
 
 function endDraw(ctx) {
@@ -49,11 +55,11 @@ function endDraw(ctx) {
 }
 
 function adjustButtonY(screen, btn) {
-  var viewTop = 110;
+  var metrics = getViewMetrics();
   var offset = getOffset(screen);
   return {
     x: btn.x,
-    y: viewTop + btn.y - offset,
+    y: metrics.viewTop + btn.y - offset,
     w: btn.w,
     h: btn.h,
     action: btn.action

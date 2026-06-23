@@ -7,6 +7,8 @@ G.W = G.canvas.width;
 G.H = G.canvas.height;
 
 (function initSystemInfo() {
+  G.safeTop = 0;
+  G.safeBottom = 0;
   try {
     var info = wx.getSystemInfoSync();
     G.pixelRatio = info.pixelRatio || 1;
@@ -16,11 +18,23 @@ G.H = G.canvas.height;
     G.windowHeight = info.windowHeight;
     G.touchScaleX = G.W / info.windowWidth;
     G.touchScaleY = G.H / info.windowHeight;
+    var scaleY = G.H / (info.windowHeight || info.screenHeight || G.H);
+    if (info.safeArea) {
+      G.safeTop = info.safeArea.top * scaleY;
+      G.safeBottom = (info.screenHeight - info.safeArea.bottom) * scaleY;
+    } else if (info.statusBarHeight) {
+      G.safeTop = info.statusBarHeight * scaleY;
+    }
   } catch (e) {
     G.pixelRatio = 1;
     G.touchScaleX = 1;
     G.touchScaleY = 1;
   }
+  G.layoutPad = {
+    top: Math.max(20, G.safeTop + 8),
+    bottom: Math.max(16, G.safeBottom + 8),
+    scrollHeader: Math.max(110, G.safeTop + 96)
+  };
 })();
 
 G.THEMES = {
@@ -104,8 +118,12 @@ G.settings = {
 };
 
 G.FEATURES = {
-  sound: false,
+  sound: true,
   leaderboard: false
+};
+
+G.SHARE = {
+  imageUrl: 'images/share-500x400.png'
 };
 
 G.tutorials = [
@@ -164,6 +182,8 @@ G.adaptiveFailCount = 0;
 G.adaptiveDifficultyBias = 0;
 G.advModePreference = null;
 G.advMechanic = null;
+G.challengeLevelNum = null;
+G.dailyPracticeMode = false;
 G.requireStars = false;
 G.beamState = null;
 G.clearSummary = null;

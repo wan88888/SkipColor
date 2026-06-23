@@ -12,6 +12,7 @@ var daily = require('./daily.js');
 var endless = require('./endless.js');
 var adaptive = require('./adaptive.js');
 var leaderboard = require('./leaderboard.js');
+var share = require('./share.js');
 
 function initApp() {
   var savedStats = G.storage.get();
@@ -44,6 +45,18 @@ function initApp() {
 
   G.currentScreen = 'home';
   G.markDirty();
+  share.captureLaunchQuery();
+}
+
+function refreshDailyStatsIfNeeded() {
+  var today = new Date().toDateString();
+  if (G.playerStats.lastDate !== today) {
+    G.playerStats.lastDate = today;
+    G.playerStats.todayNormalCleared = 0;
+    G.playerStats.todayAdvCleared = 0;
+    G.storage.saveStats(G.playerStats);
+    G.markDirty();
+  }
 }
 
 function applyAudioSettings() {
@@ -123,7 +136,58 @@ function goHome() {
   G.markDirty();
 }
 
+function startDailyChallenge(seed) {
+  G.currentMode = 'daily';
+  G.challengeLevelNum = null;
+  G.dailyPracticeMode = daily.isDailyClearedToday();
+  daily.generateDailyPuzzleFromSeed(seed);
+  G.clearSummary = null;
+  G.currentSolution = G.currentSolution || [];
+  G.isAnimating = false;
+  G.showNextBtn = false;
+  G.messageText = '';
+  G.historyStack = [];
+  G.selectedCell = null;
+  G.isHintVisible = false;
+  G.hintLevel = 0;
+  hint.resetHintLevel();
+  G.moveCount = 0;
+  G.undoCount = 0;
+  G.levelStartTime = Date.now();
+  G.currentScreen = 'game';
+  G.markDirty();
+}
+
+function startLevelChallenge(mode, levelNum, mech) {
+  G.challengeLevelNum = levelNum;
+  G.dailyPracticeMode = false;
+  G.moveCount = 0;
+  G.undoCount = 0;
+  G.hintLevel = 0;
+  hint.resetHintLevel();
+
+  if (mode === 'normal') {
+    G.currentMode = 'normal';
+    G.currentLevelNum = levelNum;
+    G.currentScreen = 'game';
+    loadLevel();
+    return;
+  }
+
+  if (mode === 'advanced') {
+    G.advMechanic = mech || 'portal';
+    G.advModePreference = G.advMechanic;
+    G.requireStars = G.advMechanic === 'star';
+    G.currentMode = 'advanced';
+    G.currentLevelNum = levelNum;
+    G.currentScreen = 'game';
+    loadLevel();
+  }
+}
+
 function startGame(mode) {
+  G.challengeLevelNum = null;
+  G.dailyPracticeMode = false;
   G.currentMode = mode;
   G.levelIndex = 0;
   G.moveCount = 0;
@@ -136,7 +200,11 @@ function startGame(mode) {
   } else if (mode === 'advanced') {
     G.currentLevelNum = G.playerStats.lifetimeAdvCleared + 1;
   } else if (mode === 'daily') {
+    G.dailyPracticeMode = daily.isDailyClearedToday();
     daily.generateDailyPuzzle();
+    if (G.dailyPracticeMode) {
+      wx.showToast({ title: '今日已完成，练习模式', icon: 'none', duration: 2000 });
+    }
     G.clearSummary = null;
     G.currentSolution = [];
     G.isAnimating = false;
@@ -213,17 +281,23 @@ function loadLevel() {
     }
   } else {
     if (G.currentMode === 'normal') {
-      G.currentLevelNum = G.playerStats.lifetimeNormalCleared + 1;
-      var fixedNormal = levelpack.getNormalLevel(G.playerStats.lifetimeNormalCleared);
-      if (fixedNormal) {
+      var normalLevel = G.challengeLevelNum || (G.playerStats.lifetimeNormalCleared + 1);
+      G.currentLevelNum = normalLevel;
+      var packIndex = Math.min(Math.max(normalLevel - 1, 0), levelpack.NORMAL_LEVEL_COUNT - 1);
+      var fixedNormal = levelpack.getNormalLevel(packIndex);
+      if (fixedNormal && normalLevel <= levelpack.NORMAL_LEVEL_COUNT) {
         level.loadFixedLevel(fixedNormal);
+        G.challengeLevelNum = null;
         G.markDirty();
         return;
       }
+      G.challengeLevelNum = null;
     } else if (G.currentMode === 'advanced') {
-      G.currentLevelNum = G.playerStats.lifetimeAdvCleared + 1;
+      var advLevel = G.challengeLevelNum || (G.playerStats.lifetimeAdvCleared + 1);
+      G.currentLevelNum = advLevel;
       G.advModePreference = G.advMechanic;
       G.requireStars = G.advMechanic === 'star';
+      G.challengeLevelNum = null;
     }
     var baseDiff = G.currentMode === 'advanced' ? 3 : 2;
     var adjDiff = adaptive.getAdjustedDifficulty(baseDiff);
@@ -246,10 +320,11 @@ function allStarsCollected() {
 
 function prepareShareFromSummary() {
   if (!G.clearSummary) return;
-  var s = G.clearSummary;
-  var starText = rating.showStars(s.stars);
   G._pendingShare = true;
-  G._shareTitle = '我在「跳跃填色」刚通关一关，获得 ' + starText + '（' + s.moveCount + '步），快来挑战吧！';
+  G._shareTitle = share.getClearShareTitle();
+  if (typeof wx.showShareMenu === 'function') {
+    wx.showShareMenu({ withShareTicket: false, menus: ['shareAppMessage'] });
+  }
   wx.showToast({ title: '请点击右上角 ··· 分享', icon: 'none', duration: 2000 });
 }
 
@@ -325,8 +400,12 @@ function nextLevel() {
     endless.onClear();
     return;
   } else if (G.currentMode === 'daily') {
-    daily.markDailyCleared();
-    achievements.check({ clearTime: summarySnapshot ? summarySnapshot.clearTime : Date.now() - G.levelStartTime });
+    if (!G.dailyPracticeMode) {
+      daily.markDailyCleared();
+      achievements.check({ clearTime: summarySnapshot ? summarySnapshot.clearTime : Date.now() - G.levelStartTime });
+    } else {
+      wx.showToast({ title: '练习模式，成绩未计入', icon: 'none', duration: 2000 });
+    }
     G.isAnimating = false;
     G.currentScreen = 'home';
     G.markDirty();
@@ -734,10 +813,13 @@ function collectStar(r, c) {
 
 module.exports = {
   initApp: initApp,
+  refreshDailyStatsIfNeeded: refreshDailyStatsIfNeeded,
   applyAudioSettings: applyAudioSettings,
   clearData: clearData,
   goHome: goHome,
   startGame: startGame,
+  startDailyChallenge: startDailyChallenge,
+  startLevelChallenge: startLevelChallenge,
   startMechTutorial: startMechTutorial,
   startAdvancedMode: startAdvancedMode,
   loadLevel: loadLevel,

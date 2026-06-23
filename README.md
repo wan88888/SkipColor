@@ -14,6 +14,8 @@
 ```
 game.js              入口
 game.json            小游戏配置（竖屏）
+images/              提审图标与分享图
+docs/submission/     提审文案、隐私说明、截图
 js/
   main.js            主循环、触摸、页面路由
   game.js            核心玩法与状态机动画
@@ -52,17 +54,35 @@ node scripts/test-levels.js
 
 ## 提审清单
 
+详细文案与后台步骤见 [`docs/submission/`](docs/submission/)：
+
+| 文件 | 说明 |
+|------|------|
+| [COPY.md](docs/submission/COPY.md) | 类目、简介、详细描述、更新说明 |
+| [PRIVACY.md](docs/submission/PRIVACY.md) | 隐私保护指引（本地存储） |
+| [ADMIN_CHECKLIST.md](docs/submission/ADMIN_CHECKLIST.md) | 微信公众平台逐步操作 |
+| [P1_CHECKLIST.md](docs/submission/P1_CHECKLIST.md) | 上线质量优化与真机测试 |
+
+### P1 上线质量（代码已落地）
+
+- [x] 生命周期 `onShow/onHide`（无尽计时暂停）
+- [x] 安全区 `safeArea` 顶栏/滚动区适配
+- [x] 分享深链 `query`（mode / level / seed）
+- [x] 每日挑战已完成 → 练习模式不计分
+- [x] 存档失败 Toast 提示
+- [ ] 真机测试记录 → 见 [P1_CHECKLIST.md](docs/submission/P1_CHECKLIST.md)
+
 ### 必备素材
 
-- [ ] 小游戏图标 512×512
-- [ ] 分享图（建议 5:4，如 500×400）
-- [ ] 至少 3 张宣传截图（竖屏 9:16）
-- [ ] 简短介绍（≤30 字）与详细描述
+- [x] 小游戏图标 512×512 → `images/icon-512.png`
+- [x] 分享图 500×400 → `images/share-500x400.png`（`G.SHARE.imageUrl`）
+- [x] 3 张宣传截图 → `docs/submission/screenshots/01-home.png` 等
+- [x] 简短介绍与详细描述 → `docs/submission/COPY.md`
 
 ### 后台配置
 
-- [ ] 微信公众平台 → 小游戏 → 设置类目（建议：休闲益智）
-- [ ] 隐私政策 / 用户协议（若收集用户信息需配置）
+- [ ] 微信公众平台 → 小游戏 → 设置类目（建议：休闲益智，见 COPY.md）
+- [ ] 隐私保护指引（见 PRIVACY.md，本地存储说明）
 - [ ] 若启用排行榜：配置**开放数据域**并上传开放数据域工程
 - [ ] 若启用音效：将 `move.mp3`、`win.mp3`、`ice.mp3` 等放入 `audio/` 目录
 

@@ -38,10 +38,13 @@ function drawGameScreen() {
   var W = G.W;
   var H = G.H;
 
+  var bottomPad = (G.layoutPad && G.layoutPad.bottom) || 16;
+  var topPad = (G.layoutPad && G.layoutPad.top) || 20;
+
   ctx.fillStyle = C.bgColor;
   ctx.fillRect(0, 0, W, H);
 
-  var y = 20;
+  var y = topPad;
   var cx = W / 2;
 
   var homeBtnX = 15;
@@ -64,7 +67,7 @@ function drawGameScreen() {
   } else if (G.currentMode === 'advanced') {
     titleText = '正式关卡';
   } else if (G.currentMode === 'daily') {
-    titleText = '每日挑战';
+    titleText = G.dailyPracticeMode ? '每日挑战 · 练习' : '每日挑战';
   } else if (G.currentMode === 'endless') {
     titleText = '无尽模式';
   } else if (G.currentMode === 'editor-test') {

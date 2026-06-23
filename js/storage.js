@@ -4,9 +4,28 @@ var STORAGE_KEY = 'jumpColorStats';
 var SETTINGS_KEY = 'jumpColorSettings';
 var THEME_KEY = 'jumpColorTheme';
 
+function safeSetStorage(key, data) {
+  try {
+    wx.setStorageSync(key, data);
+    return true;
+  } catch (e) {
+    wx.showToast({
+      title: '存档保存失败，请检查存储空间',
+      icon: 'none',
+      duration: 2500
+    });
+    return false;
+  }
+}
+
 G.storage = {
   get: function() {
-    var data = wx.getStorageSync(STORAGE_KEY);
+    var data;
+    try {
+      data = wx.getStorageSync(STORAGE_KEY);
+    } catch (e) {
+      return null;
+    }
     if (data) {
       if (typeof data.lifetimeNormalCleared === 'undefined') {
         data.lifetimeNormalCleared = data.normalClearedCount || 0;
@@ -38,40 +57,50 @@ G.storage = {
   },
 
   save: function(stats) {
-    wx.setStorageSync(STORAGE_KEY, stats);
+    return safeSetStorage(STORAGE_KEY, stats);
   },
 
   saveStats: function(stats) {
-    wx.setStorageSync(STORAGE_KEY, stats);
+    return safeSetStorage(STORAGE_KEY, stats);
   },
 
   clear: function() {
-    wx.removeStorageSync(STORAGE_KEY);
-    wx.removeStorageSync(SETTINGS_KEY);
-    wx.removeStorageSync(THEME_KEY);
+    try {
+      wx.removeStorageSync(STORAGE_KEY);
+      wx.removeStorageSync(SETTINGS_KEY);
+      wx.removeStorageSync(THEME_KEY);
+    } catch (e) {
+      wx.showToast({ title: '清除存档失败', icon: 'none' });
+    }
   },
 
   getSettings: function() {
-    var data = wx.getStorageSync(SETTINGS_KEY);
-    if (data) {
-      if (typeof data.soundEnabled === 'undefined') data.soundEnabled = false;
-      if (typeof data.vibrationEnabled === 'undefined') data.vibrationEnabled = true;
-      if (typeof data.particleEnabled === 'undefined') data.particleEnabled = true;
-      return data;
-    }
+    try {
+      var data = wx.getStorageSync(SETTINGS_KEY);
+      if (data) {
+        if (typeof data.soundEnabled === 'undefined') data.soundEnabled = false;
+        if (typeof data.vibrationEnabled === 'undefined') data.vibrationEnabled = true;
+        if (typeof data.particleEnabled === 'undefined') data.particleEnabled = true;
+        return data;
+      }
+    } catch (e) {}
     return { soundEnabled: false, vibrationEnabled: true, particleEnabled: true };
   },
 
   saveSettings: function(settings) {
-    wx.setStorageSync(SETTINGS_KEY, settings);
+    return safeSetStorage(SETTINGS_KEY, settings);
   },
 
   getTheme: function() {
-    return wx.getStorageSync(THEME_KEY) || 'default';
+    try {
+      return wx.getStorageSync(THEME_KEY) || 'default';
+    } catch (e) {
+      return 'default';
+    }
   },
 
   saveTheme: function(themeName) {
-    wx.setStorageSync(THEME_KEY, themeName);
+    return safeSetStorage(THEME_KEY, themeName);
   },
 
   unlockTheme: function(themeName) {

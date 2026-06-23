@@ -6,6 +6,8 @@ var editor = require('./editor.js');
 var achievements = require('./achievements.js');
 var levelpack = require('./levelpack.js');
 var scroll = require('./scroll.js');
+var share = require('./share.js');
+var endless = require('./endless.js');
 var C = G.CONFIG;
 
 function resetScreenScroll(screen) {
@@ -377,24 +379,42 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+function onAppShow() {
+  game.refreshDailyStatsIfNeeded();
+  endless.resumeTimer();
+}
+
+function onAppHide() {
+  endless.pauseTimer();
+}
+
 function start() {
   wx.onTouchStart(handleTouchStart);
   wx.onTouchMove(handleTouchMove);
   wx.onTouchEnd(handleTouchEnd);
 
+  wx.onShow(onAppShow);
+  wx.onHide(onAppHide);
+
   wx.onShareAppMessage(function() {
+    var shareImage = G.SHARE.imageUrl;
+    var shareQuery = share.getCurrentShareQuery();
     if (G._pendingShare && G._shareTitle) {
       G._pendingShare = false;
-      return { title: G._shareTitle, imageUrl: '' };
+      return { title: G._shareTitle, imageUrl: shareImage, query: shareQuery };
     }
     var total = G.playerStats.lifetimeNormalCleared + G.playerStats.lifetimeAdvCleared;
     return {
       title: '我在「跳跃填色」已通关 ' + total + ' 关，获得 ' + G.playerStats.totalStars + ' 颗星，快来挑战吧！',
-      imageUrl: ''
+      imageUrl: shareImage,
+      query: shareQuery
     };
   });
 
   game.initApp();
+  setTimeout(function() {
+    share.runDeferredLaunchQuery();
+  }, 300);
   gameLoop();
 }
 

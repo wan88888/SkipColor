@@ -23,43 +23,76 @@ G.H = G.canvas.height;
   }
 })();
 
-G.CONFIG = {
-  bgColor: '#f2f3f5',
-  cardBg: '#ffffff',
-  textMain: '#4a4f56',
-  textSub: '#848a93',
-  cellEmpty: '#e4e7eb',
-  cellFilled: '#9cb1a5',
-  cellNumber: '#7a8b98',
-  cellNumberText: '#ffffff',
-  accentColor: '#d19a8b',
-  btnDisabled: '#dcdfe6',
-  btnDisabledText: '#a8abb2',
-  radiusLg: 20,
-  radiusMd: 12,
-  diffEasy: '#9cb1a5',
-  diffMedium: '#dcb582',
-  diffHard: '#d19a8b',
-  gap: 6,
-  cellSize: 0,
-  maxWidth: 500,
-  iceHp1: '#abc4d9',
-  iceHp2: '#7da0c1',
-  iceHp3: '#5b84a9',
-  animSpeed: 180
+G.THEMES = {
+  default: {
+    name: '默认',
+    bgColor: '#f2f3f5', cardBg: '#ffffff', textMain: '#4a4f56', textSub: '#848a93',
+    cellEmpty: '#e4e7eb', cellFilled: '#9cb1a5', cellNumber: '#7a8b98',
+    accentColor: '#d19a8b', iceHp1: '#abc4d9', iceHp2: '#7da0c1', iceHp3: '#5b84a9',
+    btnDisabled: '#d8dce0', btnDisabledText: '#a8aeb4',
+    diffEasy: '#5bb89c', diffMedium: '#e0a04c', diffHard: '#d4604e'
+  },
+  spring: {
+    name: '春日',
+    bgColor: '#fff5f7', cardBg: '#ffffff', textMain: '#5a4a52', textSub: '#a89098',
+    cellEmpty: '#f4d7e0', cellFilled: '#e8809a', cellNumber: '#c96080',
+    accentColor: '#f0a050', iceHp1: '#fcd5e0', iceHp2: '#f8a0c0', iceHp3: '#e060a0',
+    btnDisabled: '#e8d0d8', btnDisabledText: '#c0a0a8',
+    diffEasy: '#5bb89c', diffMedium: '#e0a04c', diffHard: '#d4604e'
+  },
+  ocean: {
+    name: '深海',
+    bgColor: '#0a1929', cardBg: '#1a2f4a', textMain: '#e0e8f0', textSub: '#8090a8',
+    cellEmpty: '#2a4060', cellFilled: '#4a8fb5', cellNumber: '#3a6f95',
+    accentColor: '#f0a040', iceHp1: '#5a90b5', iceHp2: '#3a7095', iceHp3: '#1a5075',
+    btnDisabled: '#2a3040', btnDisabledText: '#506070',
+    diffEasy: '#5bb89c', diffMedium: '#e0a04c', diffHard: '#d4604e'
+  },
+  lava: {
+    name: '熔岩',
+    bgColor: '#1a0a0a', cardBg: '#2a1a1a', textMain: '#f0e0d0', textSub: '#a08070',
+    cellEmpty: '#3a2020', cellFilled: '#d04020', cellNumber: '#a03020',
+    accentColor: '#ffc040', iceHp1: '#804030', iceHp2: '#a05030', iceHp3: '#c06030',
+    btnDisabled: '#3a2020', btnDisabledText: '#604040',
+    diffEasy: '#5bb89c', diffMedium: '#e0a04c', diffHard: '#d4604e'
+  }
 };
+
+G.LAYOUT = {
+  gap: 4,
+  radiusLg: 16,
+  radiusMd: 10,
+  animSpeed: 120
+};
+
+G.currentTheme = 'default';
+G.CONFIG = {};
+for (var _tk in G.THEMES.default) {
+  G.CONFIG[_tk] = G.THEMES.default[_tk];
+}
+for (var _lk in G.LAYOUT) {
+  G.CONFIG[_lk] = G.LAYOUT[_lk];
+}
 
 G.playerStats = {
   tutorialCleared: false,
   normalClearedCount: 0,
   advTutorialCleared: false,
   advClearedCount: 0,
-  lastDate: new Date().toDateString()
+  lastDate: new Date().toDateString(),
+  totalStars: 0,
+  totalIceBroken: 0,
+  perfectStreak: 0,
+  endlessHighScore: 0,
+  dailyClearedCount: 0,
+  unlockedThemes: ['default'],
+  achievements: {}
 };
 
 G.settings = {
   soundEnabled: true,
-  vibrationEnabled: true
+  vibrationEnabled: true,
+  particleEnabled: true
 };
 
 G.tutorials = [
@@ -99,6 +132,29 @@ G.screenButtons = [];
 G.difficulty = '';
 G.difficultyColor = G.CONFIG.diffEasy;
 
+G.moveCount = 0;
+G.undoCount = 0;
+G.levelStartTime = 0;
+G.levelStars = 0;
+G.hintLevel = 0;
+G.stars = [];
+G.protectedCells = [];
+G.requiredPath = [];
+G.stepLimit = 0;
+G.dailySeed = 0;
+G.endlessScore = 0;
+G.endlessTime = 0;
+G.editorGrid = [];
+G.editorTool = 'number';
+G.editorValue = 1;
+G.adaptiveFailCount = 0;
+G.adaptiveDifficultyBias = 0;
+G.advModePreference = null;
+
+G.particles = [];
+G.celebrating = false;
+G.celebrationTimer = 0;
+
 G.needsRedraw = true;
 G.markDirty = function() { G.needsRedraw = true; };
 
@@ -117,10 +173,50 @@ G.cloneGrid = function(grid) {
         c: cell.c,
         hp: cell.hp,
         seq: cell.seq,
-        animState: cell.animState
+        animState: cell.animState,
+        color: cell.color,
+        portalId: cell.portalId,
+        mirrorDir: cell.mirrorDir,
+        bombRadius: cell.bombRadius,
+        timer: cell.timer,
+        locked: cell.locked,
+        chainId: cell.chainId,
+        isStar: cell.isStar,
+        isProtected: cell.isProtected,
+        isRequired: cell.isRequired
       });
     }
     result.push(newRow);
   }
   return result;
+};
+
+G.applyTheme = function(themeName) {
+  if (G.THEMES[themeName]) {
+    G.currentTheme = themeName;
+    var theme = G.THEMES[themeName];
+    for (var k in theme) {
+      G.CONFIG[k] = theme[k];
+    }
+    for (var lk in G.LAYOUT) {
+      G.CONFIG[lk] = G.LAYOUT[lk];
+    }
+    G.markDirty();
+  }
+};
+
+G.calcCellSize = function() {
+  var maxBoardW = Math.min(G.W - 30, 350);
+  var maxBoardH = Math.min(G.H * 0.45, 350);
+  var cellW = Math.floor((maxBoardW - G.CONFIG.gap * (G.COLS + 1)) / G.COLS);
+  var cellH = Math.floor((maxBoardH - G.CONFIG.gap * (G.ROWS + 1)) / G.ROWS);
+  return Math.min(cellW, cellH, 40);
+};
+
+G.getCellCenter = function(r, c) {
+  var cs = G.calcCellSize();
+  var gap = G.CONFIG.gap;
+  var x = G.gameBoardOffsetX + gap + c * (cs + gap) + cs / 2;
+  var y = G.gameBoardOffsetY + gap + r * (cs + gap) + cs / 2;
+  return { x: x, y: y, cs: cs };
 };

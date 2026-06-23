@@ -1,14 +1,12 @@
 var G = GameGlobal;
 var draw = require('./draw.js');
 var game = require('./game.js');
+var particles = require('./particles.js');
+var endless = require('./endless.js');
 var C = G.CONFIG;
 
 function calcCellSize() {
-  var maxBoardW = Math.min(G.W - 30, 350);
-  var maxBoardH = Math.min(G.H * 0.45, 350);
-  var cellW = Math.floor((maxBoardW - C.gap * (G.COLS + 1)) / G.COLS);
-  var cellH = Math.floor((maxBoardH - C.gap * (G.ROWS + 1)) / G.ROWS);
-  return Math.min(cellW, cellH, 40);
+  return G.calcCellSize();
 }
 
 function getBoardPixelSize() {
@@ -51,12 +49,35 @@ function drawGameScreen() {
   draw.drawText(ctx, '🏠', homeBtnX + homeBtnR, homeBtnY + homeBtnR, 20, C.textMain, 'center');
   G.btnRects.homeBtn = { x: homeBtnX, y: homeBtnY, w: homeBtnR * 2, h: homeBtnR * 2 };
 
-  var titleText = G.currentMode === 'tutorial' ? G.tutorials[G.levelIndex].title :
-    (G.currentMode === 'adv-tutorial' ? G.advTutorials[G.levelIndex].title :
-      (G.currentMode === 'advanced' ? '正式关卡' : '普通关卡'));
+  var titleText = '';
+  if (G.currentMode === 'tutorial') {
+    var tIdx = Math.min(G.levelIndex, G.tutorials.length - 1);
+    titleText = G.tutorials[tIdx].title;
+  } else if (G.currentMode === 'adv-tutorial') {
+    var atIdx = Math.min(G.levelIndex, G.advTutorials.length - 1);
+    titleText = G.advTutorials[atIdx].title;
+  } else if (G.currentMode === 'advanced') {
+    titleText = '正式关卡';
+  } else if (G.currentMode === 'daily') {
+    titleText = '每日挑战';
+  } else if (G.currentMode === 'endless') {
+    titleText = '无尽模式';
+  } else if (G.currentMode === 'editor-test') {
+    titleText = '编辑器测试';
+  } else {
+    titleText = '普通关卡';
+  }
   draw.drawText(ctx, titleText, cx, y + homeBtnR, 18, C.textMain, 'center', true);
 
-  if (G.difficulty) {
+  if (G.currentMode === 'endless') {
+    var timeText = '⏱ ' + endless.getTimeDisplay();
+    var timeW = draw.measureText(ctx, timeText, 12) + 14;
+    var timeH = 20;
+    var timeX = cx + draw.measureText(ctx, titleText, 18) / 2 + 10;
+    var timeY = y + homeBtnR - timeH / 2;
+    draw.drawRoundRect(ctx, timeX, timeY, timeW, timeH, 8, C.accentColor);
+    draw.drawText(ctx, timeText, timeX + timeW / 2, timeY + timeH / 2, 12, '#ffffff', 'center', true);
+  } else if (G.difficulty) {
     var badgeW = draw.measureText(ctx, G.difficulty, 11) + 16;
     var badgeH = 22;
     var badgeX = cx + draw.measureText(ctx, titleText, 18) / 2 + 10;
@@ -75,16 +96,32 @@ function drawGameScreen() {
     draw.drawText(ctx, levelText, levelX + levelW / 2, levelY + levelH / 2, 11, '#ffffff', 'center', true);
   }
 
+  if (G.stars && G.stars.length > 0) {
+    var collectedCount = 0;
+    for (var si = 0; si < G.stars.length; si++) {
+      if (G.stars[si].collected) collectedCount++;
+    }
+    var starText = '⭐ ' + collectedCount + '/' + G.stars.length;
+    draw.drawText(ctx, starText, cx, y + homeBtnR + 20, 12, '#ffd700', 'center', true);
+  }
+
   y += homeBtnR * 2 + 10;
 
   if (G.currentMode === 'tutorial' || G.currentMode === 'adv-tutorial') {
-    var tData = G.currentMode === 'tutorial' ? G.tutorials[G.levelIndex] : G.advTutorials[G.levelIndex];
-    var lines = draw.wrapText(ctx, tData.text, W - 40, 18, 14);
-    for (var li = 0; li < lines.length; li++) {
-      draw.drawText(ctx, lines[li], cx, y, 14, C.textSub, 'center');
-      y += 20;
+    var tData = null;
+    if (G.currentMode === 'tutorial' && G.levelIndex < G.tutorials.length) {
+      tData = G.tutorials[G.levelIndex];
+    } else if (G.currentMode === 'adv-tutorial' && G.levelIndex < G.advTutorials.length) {
+      tData = G.advTutorials[G.levelIndex];
     }
-    y += 5;
+    if (tData) {
+      var lines = draw.wrapText(ctx, tData.text, W - 40, 18, 14);
+      for (var li = 0; li < lines.length; li++) {
+        draw.drawText(ctx, lines[li], cx, y, 14, C.textSub, 'center');
+        y += 20;
+      }
+      y += 5;
+    }
   }
 
   if (G.ROWS > 0 && G.COLS > 0) {
@@ -108,6 +145,14 @@ function drawGameScreen() {
           // skip
         } else if (cellData.type === 'empty') {
           draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, C.cellEmpty);
+          if (cellData.isStar) {
+            draw.drawText(ctx, '⭐', cx_c, cy_c, 16, '#ffd700', 'center');
+          }
+          if (cellData.isProtected) {
+            ctx.strokeStyle = C.accentColor;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(rect.x + 2, rect.y + 2, rect.w - 4, rect.h - 4);
+          }
         } else if (cellData.type === 'filled') {
           var scale = cellData.animState === 'pop' ? 0.95 : 1;
           var fw = rect.w * scale, fh = rect.h * scale;
@@ -118,16 +163,26 @@ function drawGameScreen() {
           if (cellData.used) {
             ctx.globalAlpha = 0.3;
           }
+          var numColor = C.cellNumber;
+          if (cellData.color === 'red') numColor = '#e04040';
+          else if (cellData.color === 'blue') numColor = '#4080e0';
+
           if (G.selectedCell && G.selectedCell.r === r && G.selectedCell.c === c) {
-            draw.drawRoundRect(ctx, rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6, 10, C.cellNumber);
+            draw.drawRoundRect(ctx, rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6, 10, numColor);
             ctx.globalAlpha = 0.5;
             draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, C.textMain);
             ctx.globalAlpha = 1;
           } else {
-            draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, C.cellNumber);
+            draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, numColor);
           }
-          draw.drawText(ctx, '' + cellData.value, cx_c, cy_c, 20, C.cellNumberText, 'center', true);
+          var displayVal = cellData.isNegative ? Math.abs(cellData.value) : cellData.value;
+          var prefix = cellData.isNegative ? '-' : '';
+          draw.drawText(ctx, prefix + displayVal, cx_c, cy_c, 20, '#ffffff', 'center', true);
           ctx.globalAlpha = 1;
+
+          if (cellData.chainId) {
+            draw.drawText(ctx, '🔗', rect.x + 6, rect.y + 6, 10, C.textSub, 'left');
+          }
 
           if (G.isHintVisible && cellData.seq) {
             var badgeR = 9;
@@ -148,6 +203,33 @@ function drawGameScreen() {
             draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, iceColor);
           }
           draw.drawText(ctx, '' + cellData.hp, cx_c, cy_c, 20, '#ffffff', 'center', true);
+          if (cellData.timer) {
+            draw.drawText(ctx, '⏳' + cellData.timer, rect.x + rect.w / 2, rect.y + rect.h - 4, 8, C.accentColor, 'center');
+          }
+        } else if (cellData.type === 'portal') {
+          draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, C.cardBg);
+          ctx.strokeStyle = C.accentColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx_c, cy_c, rect.w / 3, 0, Math.PI * 2);
+          ctx.stroke();
+          draw.drawText(ctx, '🌀', cx_c, cy_c, 16, C.accentColor, 'center');
+        } else if (cellData.type === 'mirror') {
+          draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, C.cardBg);
+          ctx.strokeStyle = C.textSub;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          if (cellData.mirrorDir === '/') {
+            ctx.moveTo(rect.x + 4, rect.y + rect.h - 4);
+            ctx.lineTo(rect.x + rect.w - 4, rect.y + 4);
+          } else {
+            ctx.moveTo(rect.x + 4, rect.y + 4);
+            ctx.lineTo(rect.x + rect.w - 4, rect.y + rect.h - 4);
+          }
+          ctx.stroke();
+        } else if (cellData.type === 'bomb') {
+          draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, '#603030');
+          draw.drawText(ctx, '💣', cx_c, cy_c, 16, '#ffffff', 'center');
         }
 
         if (cellData.type !== 'void') {
@@ -222,6 +304,13 @@ function drawGameScreen() {
 
   y = sysBtnY + sysBtnH + 20;
 
+  if (G.moveCount > 0) {
+    var moveText = '步数: ' + G.moveCount;
+    if (G.undoCount > 0) moveText += '  撤销: ' + G.undoCount;
+    draw.drawText(ctx, moveText, cx, y, 12, C.textSub, 'center');
+    y += 18;
+  }
+
   if (G.messageText) {
     draw.drawText(ctx, G.messageText, cx, y, 18, G.messageColor, 'center', true);
     y += 30;
@@ -233,7 +322,8 @@ function drawGameScreen() {
     var nextBtnX = 20;
     var nextBtnY = y;
     draw.drawRoundRect(ctx, nextBtnX, nextBtnY, nextBtnW, nextBtnH, 25, C.cellFilled);
-    draw.drawText(ctx, '进入下一关', nextBtnX + nextBtnW / 2, nextBtnY + nextBtnH / 2, 16, '#ffffff', 'center', true);
+    var nextLabel = G.currentMode === 'endless' ? '继续' : (G.currentMode === 'daily' ? '完成' : (G.currentMode === 'editor-test' ? '返回编辑器' : '进入下一关'));
+    draw.drawText(ctx, nextLabel, nextBtnX + nextBtnW / 2, nextBtnY + nextBtnH / 2, 16, '#ffffff', 'center', true);
     G.nextBtnRect = { x: nextBtnX, y: nextBtnY, w: nextBtnW, h: nextBtnH };
     G.btnRects.nextBtn = G.nextBtnRect;
   } else {
@@ -254,6 +344,9 @@ function drawGameScreen() {
       draw.drawText(ctx, '数字 ' + step.val + '  →  ' + G.dirMapText[step.dir], hintX + 50, hy + 10, 13, C.textMain, 'left');
     }
   }
+
+  particles.update();
+  particles.render(ctx);
 }
 
 module.exports = {

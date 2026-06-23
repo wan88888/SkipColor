@@ -2,6 +2,9 @@ var G = GameGlobal;
 var screens = require('./screens.js');
 var renderer = require('./renderer.js');
 var game = require('./game.js');
+var editor = require('./editor.js');
+var achievements = require('./achievements.js');
+var C = G.CONFIG;
 
 function hitTest(x, y, rect) {
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
@@ -29,10 +32,38 @@ function handleTouchStart(e) {
     handleMenuTouch(tx, ty, handleAdvModesAction);
   } else if (G.currentScreen === 'adv-ice-menu') {
     handleMenuTouch(tx, ty, handleIceMenuAction);
+  } else if (G.currentScreen === 'achievements') {
+    handleMenuTouch(tx, ty, handleAchievementsAction);
+  } else if (G.currentScreen === 'themes') {
+    handleMenuTouch(tx, ty, handleThemesAction);
+  } else if (G.currentScreen === 'leaderboard') {
+    handleMenuTouch(tx, ty, handleLeaderboardAction);
+  } else if (G.currentScreen === 'editor') {
+    handleEditorTouch(tx, ty);
   } else if (G.currentScreen === 'coming-soon') {
     handleMenuTouch(tx, ty, handleComingSoonAction);
   } else if (G.currentScreen === 'game') {
     handleGameTouch(tx, ty);
+  }
+}
+
+function handleEditorTouch(tx, ty) {
+  for (var i = 0; i < G.screenButtons.length; i++) {
+    var btn = G.screenButtons[i];
+    if (hitTest(tx, ty, btn)) {
+      handleEditorAction(btn.action);
+      return;
+    }
+  }
+
+  if (G.editorCellRects) {
+    for (var j = 0; j < G.editorCellRects.length; j++) {
+      var cr = G.editorCellRects[j];
+      if (hitTest(tx, ty, cr)) {
+        editor.setCell(cr.r, cr.c);
+        return;
+      }
+    }
   }
 }
 
@@ -56,10 +87,10 @@ function handleGameTouch(tx, ty) {
     }
   }
 
-  for (var key in G.btnRects) {
-    if (key.indexOf('sys_') === 0 && G.btnRects[key].action) {
-      if (hitTest(tx, ty, G.btnRects[key])) {
-        G.btnRects[key].action();
+  for (var key2 in G.btnRects) {
+    if (key2.indexOf('sys_') === 0 && G.btnRects[key2].action) {
+      if (hitTest(tx, ty, G.btnRects[key2])) {
+        G.btnRects[key2].action();
         return;
       }
     }
@@ -84,15 +115,28 @@ function handleHomeAction(action) {
     case 'startTutorial': game.startGame('tutorial'); break;
     case 'startNormal': game.startGame('normal'); break;
     case 'goAdvModes': G.currentScreen = 'adv-modes'; G.markDirty(); break;
+    case 'startDaily': game.startGame('daily'); break;
+    case 'startEndless': game.startGame('endless'); break;
+    case 'goAchievements': G.currentScreen = 'achievements'; G.markDirty(); break;
+    case 'goThemes': G.currentScreen = 'themes'; G.markDirty(); break;
+    case 'goLeaderboard': G.currentScreen = 'leaderboard'; G.markDirty(); break;
+    case 'goEditor':
+      editor.init(6, 7);
+      break;
     case 'clearData': game.clearData(); break;
     case 'toggleSound': game.toggleSound(); break;
+    case 'toggleVibration': game.toggleVibration(); break;
+    case 'toggleParticle': game.toggleParticle(); break;
   }
 }
 
 function handleAdvModesAction(action) {
   switch (action) {
     case 'goIceMenu': G.currentScreen = 'adv-ice-menu'; G.markDirty(); break;
-    case 'goComingSoon': G.currentScreen = 'coming-soon'; G.markDirty(); break;
+    case 'startPortalMode': G.advModePreference = 'portal'; game.startGame('advanced'); break;
+    case 'startMirrorMode': G.advModePreference = 'mirror'; game.startGame('advanced'); break;
+    case 'startBombMode': G.advModePreference = 'bomb'; game.startGame('advanced'); break;
+    case 'startStarMode': G.advModePreference = 'star'; game.startGame('advanced'); break;
     case 'goHome': G.currentScreen = 'home'; G.markDirty(); break;
   }
 }
@@ -105,11 +149,97 @@ function handleIceMenuAction(action) {
   }
 }
 
+function handleAchievementsAction(action) {
+  switch (action) {
+    case 'goHome': G.currentScreen = 'home'; G.markDirty(); break;
+  }
+}
+
+function handleThemesAction(action) {
+  if (action === 'goHome') {
+    G.currentScreen = 'home';
+    G.markDirty();
+    return;
+  }
+
+  if (action.indexOf('theme_') === 0) {
+    var themeName = action.substring(6);
+    if (G.playerStats.unlockedThemes.indexOf(themeName) !== -1) {
+      G.applyTheme(themeName);
+      G.storage.saveTheme(themeName);
+    }
+  }
+}
+
+function handleLeaderboardAction(action) {
+  switch (action) {
+    case 'goHome':
+      G.currentScreen = 'home';
+      G.markDirty();
+      break;
+    case 'refreshLeaderboard':
+      G._leaderboardData = null;
+      G._leaderboardLoading = false;
+      G.markDirty();
+      break;
+  }
+}
+
+function handleEditorAction(action) {
+  if (action === 'goHome') {
+    G.currentScreen = 'home';
+    G.markDirty();
+    return;
+  }
+
+  if (action.indexOf('tool_') === 0) {
+    var toolId = action.substring(5);
+    editor.setTool(toolId);
+    return;
+  }
+
+  switch (action) {
+    case 'editor_test': editor.playTest(); break;
+    case 'editor_share': editor.shareLevel(); break;
+    case 'editor_import': editor.importLevel(); break;
+  }
+}
+
 function handleComingSoonAction(action) {
   switch (action) {
     case 'goAdvModes': G.currentScreen = 'adv-modes'; G.markDirty(); break;
   }
 }
+
+function checkThemeUnlocks() {
+  var s = G.playerStats;
+  var totalCleared = s.normalClearedCount + s.advClearedCount;
+  var changed = false;
+
+  if (totalCleared >= 10 && s.unlockedThemes.indexOf('spring') === -1) {
+    s.unlockedThemes.push('spring');
+    changed = true;
+    wx.showToast({ title: '🎨 解锁主题：春日', icon: 'none' });
+  }
+  if (s.totalStars >= 30 && s.unlockedThemes.indexOf('ocean') === -1) {
+    s.unlockedThemes.push('ocean');
+    changed = true;
+    wx.showToast({ title: '🎨 解锁主题：深海', icon: 'none' });
+  }
+  if (s.endlessHighScore >= 50 && s.unlockedThemes.indexOf('lava') === -1) {
+    s.unlockedThemes.push('lava');
+    changed = true;
+    wx.showToast({ title: '🎨 解锁主题：熔岩', icon: 'none' });
+  }
+
+  if (changed) {
+    G.storage.saveStats(G.playerStats);
+  }
+
+  achievements.check({});
+}
+
+G.checkThemeUnlocks = checkThemeUnlocks;
 
 function render() {
   G.btnRects = {};
@@ -123,6 +253,18 @@ function render() {
       break;
     case 'adv-ice-menu':
       screens.screenIceMenu.draw();
+      break;
+    case 'achievements':
+      screens.screenAchievements.draw();
+      break;
+    case 'themes':
+      screens.screenThemes.draw();
+      break;
+    case 'leaderboard':
+      screens.screenLeaderboard.draw();
+      break;
+    case 'editor':
+      screens.screenEditor.draw();
       break;
     case 'coming-soon':
       screens.screenComingSoon.draw();
@@ -147,7 +289,7 @@ function start() {
   wx.onShareAppMessage(function() {
     var total = G.playerStats.normalClearedCount + G.playerStats.advClearedCount;
     return {
-      title: '我在「跳跃填色」今天已通关 ' + total + ' 关，快来挑战吧！',
+      title: '我在「跳跃填色」已通关 ' + total + ' 关，获得 ' + G.playerStats.totalStars + ' 颗星，快来挑战吧！',
       imageUrl: ''
     };
   });

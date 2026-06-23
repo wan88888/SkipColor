@@ -31,17 +31,17 @@ G.audio = {
   },
 
   vibrateShort: function() {
-    if (!this._enabled) return;
+    if (!G.settings.vibrationEnabled) return;
     try { wx.vibrateShort({ type: 'light' }); } catch (e) {}
   },
 
   vibrateMedium: function() {
-    if (!this._enabled) return;
+    if (!G.settings.vibrationEnabled) return;
     try { wx.vibrateShort({ type: 'medium' }); } catch (e) {}
   },
 
   vibrateLong: function() {
-    if (!this._enabled) return;
+    if (!G.settings.vibrationEnabled) return;
     try { wx.vibrateLong(); } catch (e) {}
   },
 

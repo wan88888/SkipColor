@@ -2,6 +2,7 @@ var G = GameGlobal;
 
 var STORAGE_KEY = 'jumpColorStats';
 var SETTINGS_KEY = 'jumpColorSettings';
+var THEME_KEY = 'jumpColorTheme';
 
 G.storage = {
   get: function() {
@@ -13,6 +14,14 @@ G.storage = {
         data.lastDate = new Date().toDateString();
       }
       if (typeof data.advClearedCount === 'undefined') data.advClearedCount = 0;
+      if (typeof data.totalStars === 'undefined') data.totalStars = 0;
+      if (typeof data.totalIceBroken === 'undefined') data.totalIceBroken = 0;
+      if (typeof data.perfectStreak === 'undefined') data.perfectStreak = 0;
+      if (typeof data.endlessHighScore === 'undefined') data.endlessHighScore = 0;
+      if (typeof data.dailyClearedCount === 'undefined') data.dailyClearedCount = 0;
+      if (typeof data.unlockedThemes === 'undefined') data.unlockedThemes = ['default'];
+      if (typeof data.achievements === 'undefined') data.achievements = {};
+      if (typeof data.lastDailyDate === 'undefined') data.lastDailyDate = '';
       return data;
     }
     return null;
@@ -23,9 +32,15 @@ G.storage = {
     this.syncToCloud(stats);
   },
 
+  saveStats: function(stats) {
+    wx.setStorageSync(STORAGE_KEY, stats);
+    this.syncToCloud(stats);
+  },
+
   clear: function() {
     wx.removeStorageSync(STORAGE_KEY);
-    this.removeFromCloud(STORAGE_KEY);
+    wx.removeStorageSync(THEME_KEY);
+    this.removeFromCloud();
   },
 
   getSettings: function() {
@@ -33,13 +48,29 @@ G.storage = {
     if (data) {
       if (typeof data.soundEnabled === 'undefined') data.soundEnabled = true;
       if (typeof data.vibrationEnabled === 'undefined') data.vibrationEnabled = true;
+      if (typeof data.particleEnabled === 'undefined') data.particleEnabled = true;
       return data;
     }
-    return { soundEnabled: true, vibrationEnabled: true };
+    return { soundEnabled: true, vibrationEnabled: true, particleEnabled: true };
   },
 
   saveSettings: function(settings) {
     wx.setStorageSync(SETTINGS_KEY, settings);
+  },
+
+  getTheme: function() {
+    return wx.getStorageSync(THEME_KEY) || 'default';
+  },
+
+  saveTheme: function(themeName) {
+    wx.setStorageSync(THEME_KEY, themeName);
+  },
+
+  unlockTheme: function(themeName) {
+    if (G.playerStats.unlockedThemes.indexOf(themeName) === -1) {
+      G.playerStats.unlockedThemes.push(themeName);
+      this.saveStats(G.playerStats);
+    }
   },
 
   syncToCloud: function(stats) {

@@ -1,6 +1,8 @@
 var G = GameGlobal;
 var C = G.CONFIG;
 var level = require('./level.js');
+var beam = require('./beam.js');
+var levelpack = require('./levelpack.js');
 var audio = require('./audio.js');
 var particles = require('./particles.js');
 var achievements = require('./achievements.js');
@@ -35,8 +37,8 @@ function initApp() {
   var today = new Date().toDateString();
   if (G.playerStats.lastDate !== today) {
     G.playerStats.lastDate = today;
-    G.playerStats.normalClearedCount = 0;
-    G.playerStats.advClearedCount = 0;
+    G.playerStats.todayNormalCleared = 0;
+    G.playerStats.todayAdvCleared = 0;
     G.storage.saveStats(G.playerStats);
   }
 
@@ -56,9 +58,11 @@ function clearData() {
       if (res.confirm) {
         G.playerStats = {
           tutorialCleared: false,
-          normalClearedCount: 0,
+          lifetimeNormalCleared: 0,
+          lifetimeAdvCleared: 0,
+          todayNormalCleared: 0,
+          todayAdvCleared: 0,
           advTutorialCleared: false,
-          advClearedCount: 0,
           lastDate: new Date().toDateString(),
           totalStars: 0,
           totalIceBroken: 0,
@@ -66,7 +70,8 @@ function clearData() {
           endlessHighScore: 0,
           dailyClearedCount: 0,
           unlockedThemes: ['default'],
-          achievements: {}
+          achievements: {},
+          mechTutorialCleared: { portal: false, mirror: false, bomb: false, star: false }
         };
         G.storage.saveStats(G.playerStats);
         G.currentTheme = 'default';
@@ -98,12 +103,13 @@ function goHome() {
     endless.stopTimer();
   }
 
-  if (G.historyStack.length > 0 || G.showNextBtn) {
+  if (G.historyStack.length > 0 || G.showNextBtn || G.clearSummary) {
     wx.showModal({
       title: '返回主页',
       content: '您的当前关卡进度将无法保存。',
       success: function(res) {
         if (res.confirm) {
+          G.clearSummary = null;
           G.currentScreen = 'home';
           G.markDirty();
         }
@@ -112,6 +118,7 @@ function goHome() {
     return;
   }
 
+  G.clearSummary = null;
   G.currentScreen = 'home';
   G.markDirty();
 }
@@ -125,11 +132,12 @@ function startGame(mode) {
   hint.resetHintLevel();
 
   if (mode === 'normal') {
-    G.currentLevelNum = G.playerStats.normalClearedCount + 1;
+    G.currentLevelNum = G.playerStats.lifetimeNormalCleared + 1;
   } else if (mode === 'advanced') {
-    G.currentLevelNum = G.playerStats.advClearedCount + 1;
+    G.currentLevelNum = G.playerStats.lifetimeAdvCleared + 1;
   } else if (mode === 'daily') {
     daily.generateDailyPuzzle();
+    G.clearSummary = null;
     G.currentSolution = [];
     G.isAnimating = false;
     G.showNextBtn = false;
@@ -155,13 +163,31 @@ function startGame(mode) {
   loadLevel();
 }
 
+function startMechTutorial(mech) {
+  G.advMechanic = mech;
+  G.currentMode = 'mech-tutorial';
+  G.levelIndex = 0;
+  G.currentLevelNum = 0;
+  G.currentScreen = 'game';
+  loadLevel();
+}
+
+function startAdvancedMode(mech) {
+  G.advMechanic = mech;
+  G.advModePreference = mech;
+  G.requireStars = mech === 'star';
+  startGame('advanced');
+}
+
 function loadLevel() {
   G.isHintVisible = false;
   G.historyStack = [];
   G.isAnimating = false;
   G.showNextBtn = false;
+  G.clearSummary = null;
   G.messageText = '';
   G.difficulty = '';
+  G.requireStars = false;
   G.moveCount = 0;
   G.undoCount = 0;
   G.hintLevel = 0;
@@ -180,11 +206,24 @@ function loadLevel() {
       return { r: s.r, c: s.c, val: s.val, dir: s.dir };
     });
     level.loadGridData(tData2.matrix);
+  } else if (G.currentMode === 'mech-tutorial') {
+    var mechData = levelpack.getMechTutorial(G.advMechanic, G.levelIndex);
+    if (mechData) {
+      level.loadFixedLevel(mechData);
+    }
   } else {
     if (G.currentMode === 'normal') {
-      G.currentLevelNum = G.playerStats.normalClearedCount + 1;
+      G.currentLevelNum = G.playerStats.lifetimeNormalCleared + 1;
+      var fixedNormal = levelpack.getNormalLevel(G.playerStats.lifetimeNormalCleared);
+      if (fixedNormal) {
+        level.loadFixedLevel(fixedNormal);
+        G.markDirty();
+        return;
+      }
     } else if (G.currentMode === 'advanced') {
-      G.currentLevelNum = G.playerStats.advClearedCount + 1;
+      G.currentLevelNum = G.playerStats.lifetimeAdvCleared + 1;
+      G.advModePreference = G.advMechanic;
+      G.requireStars = G.advMechanic === 'star';
     }
     var baseDiff = G.currentMode === 'advanced' ? 3 : 2;
     var adjDiff = adaptive.getAdjustedDifficulty(baseDiff);
@@ -193,9 +232,32 @@ function loadLevel() {
   G.markDirty();
 }
 
+function shouldShowClearSummary() {
+  return G.currentMode === 'normal' || G.currentMode === 'advanced' || G.currentMode === 'daily';
+}
+
+function allStarsCollected() {
+  if (!G.requireStars || !G.stars || G.stars.length === 0) return true;
+  for (var i = 0; i < G.stars.length; i++) {
+    if (!G.stars[i].collected) return false;
+  }
+  return true;
+}
+
+function prepareShareFromSummary() {
+  if (!G.clearSummary) return;
+  var s = G.clearSummary;
+  var starText = rating.showStars(s.stars);
+  G._pendingShare = true;
+  G._shareTitle = '我在「跳跃填色」刚通关一关，获得 ' + starText + '（' + s.moveCount + '步），快来挑战吧！';
+  wx.showToast({ title: '请点击右上角 ··· 分享', icon: 'none', duration: 2000 });
+}
+
 function nextLevel() {
   if (G.isAnimating) return;
   G.showNextBtn = false;
+  var summarySnapshot = G.clearSummary;
+  G.clearSummary = null;
   G.isAnimating = true;
   G.markDirty();
 
@@ -235,22 +297,39 @@ function nextLevel() {
       });
       return;
     }
+  } else if (G.currentMode === 'mech-tutorial') {
+    G.levelIndex++;
+    var mechCount = levelpack.getMechTutorialCount(G.advMechanic);
+    if (G.levelIndex >= mechCount) {
+      if (!G.playerStats.mechTutorialCleared) G.playerStats.mechTutorialCleared = {};
+      G.playerStats.mechTutorialCleared[G.advMechanic] = true;
+      G.storage.saveStats(G.playerStats);
+      audio.vibrateMedium();
+      var mechLabel = levelpack.getMechLabel(G.advMechanic);
+      wx.showModal({
+        title: '🎉 ' + mechLabel + '教学完成！',
+        content: '已解锁该机制的正式关卡！',
+        showCancel: false,
+        success: function() {
+          G.advModePreference = G.advMechanic;
+          G.requireStars = G.advMechanic === 'star';
+          G.currentMode = 'advanced';
+          G.levelIndex = 0;
+          G.isAnimating = false;
+          loadLevel();
+        }
+      });
+      return;
+    }
   } else if (G.currentMode === 'endless') {
     endless.onClear();
     return;
   } else if (G.currentMode === 'daily') {
     daily.markDailyCleared();
-    achievements.check({ clearTime: Date.now() - G.levelStartTime });
+    achievements.check({ clearTime: summarySnapshot ? summarySnapshot.clearTime : Date.now() - G.levelStartTime });
     G.isAnimating = false;
-    wx.showModal({
-      title: '🎉 每日挑战完成！',
-      content: '明天再来挑战新的关卡吧！',
-      showCancel: false,
-      success: function() {
-        G.currentScreen = 'home';
-        G.markDirty();
-      }
-    });
+    G.currentScreen = 'home';
+    G.markDirty();
     return;
   } else if (G.currentMode === 'editor-test') {
     G.currentMode = 'editor';
@@ -259,8 +338,8 @@ function nextLevel() {
     G.markDirty();
     return;
   } else {
-    var clearTime = Date.now() - G.levelStartTime;
-    var stars = rating.calculateStars(
+    var clearTime = summarySnapshot ? summarySnapshot.clearTime : Date.now() - G.levelStartTime;
+    var stars = summarySnapshot ? summarySnapshot.stars : rating.calculateStars(
       G.currentMode,
       G.moveCount,
       rating.getOptimalMoves(G.currentSolution),
@@ -276,18 +355,22 @@ function nextLevel() {
       G.playerStats.perfectStreak = 0;
     }
 
-    if (G.currentMode === 'normal') G.playerStats.normalClearedCount++;
-    if (G.currentMode === 'advanced') G.playerStats.advClearedCount++;
+    if (G.currentMode === 'normal') {
+      G.playerStats.lifetimeNormalCleared++;
+      G.playerStats.todayNormalCleared++;
+    }
+    if (G.currentMode === 'advanced') {
+      G.playerStats.lifetimeAdvCleared++;
+      G.playerStats.todayAdvCleared++;
+    }
 
     adaptive.recordResult(true);
     achievements.check({ clearTime: clearTime });
     G.storage.saveStats(G.playerStats);
     leaderboard.init();
     if (G.checkThemeUnlocks) G.checkThemeUnlocks();
-
-    var starText = rating.showStars(stars);
-    wx.showToast({ title: starText, icon: 'none', duration: 1500 });
   }
+  G.isAnimating = false;
   loadLevel();
 }
 
@@ -410,13 +493,39 @@ function checkGameState() {
   }
 
   if (!hasEmpty) {
+    if (!allStarsCollected()) {
+      G.messageText = '还有星星未收集！';
+      G.messageColor = C.accentColor;
+      audio.vibrateLong();
+      G.markDirty();
+      return;
+    }
+
     G.messageText = '顺利通关！';
     G.messageColor = C.cellFilled;
-    G.showNextBtn = true;
     if (G.isHintVisible) toggleHint();
     audio.play('win');
     audio.vibrateLong();
     particles.spawnCelebration();
+
+    if (shouldShowClearSummary()) {
+      G.clearSummary = {
+        stars: rating.calculateStars(
+          G.currentMode,
+          G.moveCount,
+          rating.getOptimalMoves(G.currentSolution),
+          G.undoCount,
+          G.hintLevel
+        ),
+        moveCount: G.moveCount,
+        optimalMoves: rating.getOptimalMoves(G.currentSolution),
+        clearTime: Date.now() - G.levelStartTime,
+        undoCount: G.undoCount
+      };
+    } else {
+      G.showNextBtn = true;
+    }
+
     if (G.currentMode === 'endless') {
       G.isAnimating = true;
       setTimeout(function() {
@@ -450,8 +559,6 @@ function move(dr, dc) {
   var r = G.selectedCell.r, c = G.selectedCell.c;
   var cell = G.gridData[r][c];
   var targetCount = cell.value;
-  var filledCount = 0;
-  var currR = r, currC = c;
 
   cell.used = true;
   G.selectedCell = null;
@@ -459,133 +566,123 @@ function move(dr, dc) {
   audio.vibrateShort();
   G.markDirty();
 
-  doMoveAnimation(dr, dc, currR, currC, targetCount, filledCount, dr, dc, 0);
+  G.beamState = {
+    dr: dr,
+    dc: dc,
+    currR: r,
+    currC: c,
+    targetCount: targetCount,
+    filledCount: 0,
+    origDr: dr,
+    origDc: dc,
+    depth: 0
+  };
+  processBeamAnimation();
 }
 
-function doMoveAnimation(dr, dc, currR, currC, targetCount, filledCount, origDr, origDc, depth) {
-  if (depth > 200) {
-    G.isAnimating = false;
-    checkGameState();
-    return;
-  }
-
-  if (filledCount >= targetCount) {
-    G.isAnimating = false;
-    checkGameState();
-    return;
-  }
-
-  currR += dr;
-  currC += dc;
-
-  if (currR < 0 || currR >= G.ROWS || currC < 0 || currC >= G.COLS) {
-    G.isAnimating = false;
-    checkGameState();
-    return;
-  }
-
-  var targetCell = G.gridData[currR][currC];
-  if (targetCell.type === 'void' || targetCell.type === 'filled' || targetCell.type === 'number') {
-    doMoveAnimation(dr, dc, currR, currC, targetCount, filledCount, origDr, origDc, depth + 1);
-    return;
-  }
-
-  if (targetCell.type === 'portal') {
-    var portalId = targetCell.portalId;
-    var otherPortal = findOtherPortal(portalId, currR, currC);
-    if (otherPortal) {
-      var startPos = G.getCellCenter(currR, currC);
-      var endPos = G.getCellCenter(otherPortal.r, otherPortal.c);
-      particles.spawnBeamParticles(
-        startPos.x, startPos.y,
-        endPos.x, endPos.y,
-        C.accentColor
-      );
-      doMoveAnimation(origDr, origDc, otherPortal.r, otherPortal.c, targetCount, filledCount, origDr, origDc, depth + 1);
-      return;
-    }
-    G.isAnimating = false;
-    checkGameState();
-    return;
-  }
-
-  if (targetCell.type === 'mirror') {
-    var newDr = dc, newDc = dr;
-    if (targetCell.mirrorDir === '/') {
-      newDr = -dc; newDc = -dr;
-    }
-    doMoveAnimation(newDr, newDc, currR, currC, targetCount, filledCount, newDr, newDc, depth + 1);
-    return;
-  }
-
-  if (targetCell.type === 'bomb') {
-    explodeBomb(currR, currC, targetCell.bombRadius || 1);
-    filledCount++;
-    G.markDirty();
-    setTimeout(function() {
-      doMoveAnimation(dr, dc, currR, currC, targetCount, filledCount, origDr, origDc, depth + 1);
-    }, C.animSpeed + 50);
-    return;
-  }
-
-  if (targetCell.type === 'empty') {
-    targetCell.type = 'filled';
-    targetCell.animState = 'pop';
-    if (targetCell.isStar) {
-      collectStar(currR, currC);
-    }
-    filledCount++;
-    var fillPos = G.getCellCenter(currR, currC);
-    particles.spawnFillBurst(
-      fillPos.x, fillPos.y,
-      C.cellFilled
-    );
-    G.markDirty();
-    setTimeout(function() {
-      if (targetCell.animState === 'pop') targetCell.animState = null;
-      G.markDirty();
-      doMoveAnimation(dr, dc, currR, currC, targetCount, filledCount, origDr, origDc, depth + 1);
-    }, C.animSpeed);
-    return;
-  }
-
-  if (targetCell.type === 'ice') {
-    targetCell.hp--;
-    targetCell.animState = 'hit';
-    filledCount++;
-    G.playerStats.totalIceBroken++;
-    audio.play('ice');
-    audio.vibrateMedium();
-    var icePos = G.getCellCenter(currR, currC);
-    particles.spawnIceBreak(icePos.x, icePos.y);
-    G.markDirty();
-    setTimeout(function() {
-      targetCell.animState = null;
-      if (targetCell.hp <= 0) {
-        targetCell.type = 'empty';
-        delete targetCell.hp;
-      }
-      G.markDirty();
-      doMoveAnimation(dr, dc, currR, currC, targetCount, filledCount, origDr, origDc, depth + 1);
-    }, C.animSpeed + 80);
-    return;
-  }
-
+function finishBeamAnimation() {
   G.isAnimating = false;
+  G.beamState = null;
   checkGameState();
 }
 
-function findOtherPortal(portalId, excludeR, excludeC) {
-  for (var r = 0; r < G.ROWS; r++) {
-    for (var c = 0; c < G.COLS; c++) {
-      if (r === excludeR && c === excludeC) continue;
-      var cell = G.gridData[r][c];
-      if (cell.type === 'portal' && cell.portalId === portalId) {
-        return { r: r, c: c };
-      }
+function processBeamAnimation() {
+  var s = G.beamState;
+  if (!s) return;
+
+  while (s.filledCount < s.targetCount && s.depth < 200) {
+    s.depth++;
+    s.currR += s.dr;
+    s.currC += s.dc;
+
+    if (s.currR < 0 || s.currR >= G.ROWS || s.currC < 0 || s.currC >= G.COLS) {
+      finishBeamAnimation();
+      return;
     }
+
+    var targetCell = G.gridData[s.currR][s.currC];
+    if (targetCell.type === 'void' || targetCell.type === 'filled' || targetCell.type === 'number') {
+      continue;
+    }
+
+    if (targetCell.type === 'portal') {
+      var otherPortal = beam.findOtherPortal(
+        G.gridData, targetCell.portalId, s.currR, s.currC, G.ROWS, G.COLS
+      );
+      if (!otherPortal) {
+        finishBeamAnimation();
+        return;
+      }
+      var startPos = G.getCellCenter(s.currR, s.currC);
+      var endPos = G.getCellCenter(otherPortal.r, otherPortal.c);
+      particles.spawnBeamParticles(startPos.x, startPos.y, endPos.x, endPos.y, C.accentColor);
+      s.currR = otherPortal.r;
+      s.currC = otherPortal.c;
+      s.dr = s.origDr;
+      s.dc = s.origDc;
+      continue;
+    }
+
+    if (targetCell.type === 'mirror') {
+      var reflected = beam.reflectDirection(s.dr, s.dc, targetCell.mirrorDir);
+      s.dr = reflected[0];
+      s.dc = reflected[1];
+      s.origDr = s.dr;
+      s.origDc = s.dc;
+      continue;
+    }
+
+    if (targetCell.type === 'bomb') {
+      explodeBomb(s.currR, s.currC, targetCell.bombRadius || 1);
+      s.filledCount++;
+      G.markDirty();
+      setTimeout(processBeamAnimation, C.animSpeed + 50);
+      return;
+    }
+
+    if (targetCell.type === 'empty') {
+      targetCell.type = 'filled';
+      targetCell.animState = 'pop';
+      if (targetCell.isStar) collectStar(s.currR, s.currC);
+      s.filledCount++;
+      var fillPos = G.getCellCenter(s.currR, s.currC);
+      particles.spawnFillBurst(fillPos.x, fillPos.y, C.cellFilled);
+      G.markDirty();
+      setTimeout(function() {
+        if (targetCell.animState === 'pop') targetCell.animState = null;
+        G.markDirty();
+        processBeamAnimation();
+      }, C.animSpeed);
+      return;
+    }
+
+    if (targetCell.type === 'ice') {
+      targetCell.hp--;
+      targetCell.animState = 'hit';
+      s.filledCount++;
+      G.playerStats.totalIceBroken++;
+      audio.play('ice');
+      audio.vibrateMedium();
+      var icePos = G.getCellCenter(s.currR, s.currC);
+      particles.spawnIceBreak(icePos.x, icePos.y);
+      G.markDirty();
+      setTimeout(function() {
+        targetCell.animState = null;
+        if (targetCell.hp <= 0) {
+          targetCell.type = 'empty';
+          delete targetCell.hp;
+        }
+        G.markDirty();
+        processBeamAnimation();
+      }, C.animSpeed + 80);
+      return;
+    }
+
+    finishBeamAnimation();
+    return;
   }
-  return null;
+
+  finishBeamAnimation();
 }
 
 function explodeBomb(r, c, radius) {
@@ -606,7 +703,7 @@ function explodeBomb(r, c, radius) {
         delete cell.hp;
         var bp = G.getCellCenter(nr, nc);
         particles.spawnIceBreak(bp.x, bp.y);
-      } else if (cell.type === 'empty' && !cell.isProtected) {
+      } else if (cell.type === 'empty') {
         cell.type = 'filled';
         cell.animState = 'pop';
         popCells.push(cell);
@@ -641,8 +738,11 @@ module.exports = {
   clearData: clearData,
   goHome: goHome,
   startGame: startGame,
+  startMechTutorial: startMechTutorial,
+  startAdvancedMode: startAdvancedMode,
   loadLevel: loadLevel,
   nextLevel: nextLevel,
+  prepareShareFromSummary: prepareShareFromSummary,
   resetCurrentLevel: resetCurrentLevel,
   saveHistory: saveHistory,
   undoMove: undoMove,

@@ -11,8 +11,7 @@ var TOOLS = [
   { id: 'portal', name: '传送门', value: -5 },
   { id: 'mirror', name: '镜子', value: -6 },
   { id: 'bomb', name: '炸弹', value: -7 },
-  { id: 'star', name: '星星', value: -8 },
-  { id: 'protected', name: '禁区', value: -9 }
+  { id: 'star', name: '星星', value: -8 }
 ];
 
 function init(rows, cols) {

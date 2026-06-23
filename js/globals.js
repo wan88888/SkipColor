@@ -76,9 +76,11 @@ for (var _lk in G.LAYOUT) {
 
 G.playerStats = {
   tutorialCleared: false,
-  normalClearedCount: 0,
+  lifetimeNormalCleared: 0,
+  lifetimeAdvCleared: 0,
+  todayNormalCleared: 0,
+  todayAdvCleared: 0,
   advTutorialCleared: false,
-  advClearedCount: 0,
   lastDate: new Date().toDateString(),
   totalStars: 0,
   totalIceBroken: 0,
@@ -86,13 +88,24 @@ G.playerStats = {
   endlessHighScore: 0,
   dailyClearedCount: 0,
   unlockedThemes: ['default'],
-  achievements: {}
+  achievements: {},
+  mechTutorialCleared: {
+    portal: false,
+    mirror: false,
+    bomb: false,
+    star: false
+  }
 };
 
 G.settings = {
-  soundEnabled: true,
+  soundEnabled: false,
   vibrationEnabled: true,
   particleEnabled: true
+};
+
+G.FEATURES = {
+  sound: false,
+  leaderboard: false
 };
 
 G.tutorials = [
@@ -150,6 +163,14 @@ G.editorValue = 1;
 G.adaptiveFailCount = 0;
 G.adaptiveDifficultyBias = 0;
 G.advModePreference = null;
+G.advMechanic = null;
+G.requireStars = false;
+G.beamState = null;
+G.clearSummary = null;
+G.screenScroll = { home: 0, achievements: 0 };
+G._screenContentHeight = {};
+G._scrollTouch = null;
+G._pendingShare = false;
 
 G.particles = [];
 G.celebrating = false;

@@ -4,7 +4,46 @@ var renderer = require('./renderer.js');
 var game = require('./game.js');
 var editor = require('./editor.js');
 var achievements = require('./achievements.js');
+var levelpack = require('./levelpack.js');
+var scroll = require('./scroll.js');
 var C = G.CONFIG;
+
+function resetScreenScroll(screen) {
+  scroll.reset(screen);
+}
+
+function handleScrollableTouchStart(tx, ty, screen, handler) {
+  G._scrollTouch = { startX: tx, startY: ty, lastY: ty, moved: false, screen: screen };
+  G._pendingMenuAction = null;
+  for (var i = 0; i < G.screenButtons.length; i++) {
+    var btn = scroll.adjustButtonY(screen, G.screenButtons[i]);
+    if (hitTest(tx, ty, btn)) {
+      G._pendingMenuAction = btn.action;
+      return;
+    }
+  }
+}
+
+function handleScrollableTouchMove(ty) {
+  if (!G._scrollTouch) return;
+  if (!G._scrollTouch.moved && Math.abs(G._scrollTouch.startY - ty) > 8) {
+    G._scrollTouch.moved = true;
+    G._pendingMenuAction = null;
+  }
+  if (G._scrollTouch.moved) {
+    var dy = G._scrollTouch.lastY - ty;
+    scroll.applyScroll(G._scrollTouch.screen, dy);
+    G._scrollTouch.lastY = ty;
+  }
+}
+
+function handleScrollableTouchEnd(handler) {
+  if (G._scrollTouch && !G._scrollTouch.moved && G._pendingMenuAction) {
+    handler(G._pendingMenuAction);
+  }
+  G._scrollTouch = null;
+  G._pendingMenuAction = null;
+}
 
 function hitTest(x, y, rect) {
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
@@ -26,14 +65,19 @@ function handleTouchStart(e) {
   var tx = touch.clientX * G.touchScaleX;
   var ty = touch.clientY * G.touchScaleY;
 
+  if (G.currentScreen === 'game') {
+    handleGameTouch(tx, ty);
+    return;
+  }
+
   if (G.currentScreen === 'home') {
-    handleMenuTouch(tx, ty, handleHomeAction);
+    handleScrollableTouchStart(tx, ty, 'home', handleHomeAction);
+  } else if (G.currentScreen === 'achievements') {
+    handleScrollableTouchStart(tx, ty, 'achievements', handleAchievementsAction);
   } else if (G.currentScreen === 'adv-modes') {
     handleMenuTouch(tx, ty, handleAdvModesAction);
   } else if (G.currentScreen === 'adv-ice-menu') {
     handleMenuTouch(tx, ty, handleIceMenuAction);
-  } else if (G.currentScreen === 'achievements') {
-    handleMenuTouch(tx, ty, handleAchievementsAction);
   } else if (G.currentScreen === 'themes') {
     handleMenuTouch(tx, ty, handleThemesAction);
   } else if (G.currentScreen === 'leaderboard') {
@@ -42,8 +86,21 @@ function handleTouchStart(e) {
     handleEditorTouch(tx, ty);
   } else if (G.currentScreen === 'coming-soon') {
     handleMenuTouch(tx, ty, handleComingSoonAction);
-  } else if (G.currentScreen === 'game') {
-    handleGameTouch(tx, ty);
+  }
+}
+
+function handleTouchMove(e) {
+  if (!G._scrollTouch) return;
+  var touch = e.touches[0];
+  var ty = touch.clientY * G.touchScaleY;
+  handleScrollableTouchMove(ty);
+}
+
+function handleTouchEnd(e) {
+  if (G.currentScreen === 'home' && G._scrollTouch) {
+    handleScrollableTouchEnd(handleHomeAction);
+  } else if (G.currentScreen === 'achievements' && G._scrollTouch) {
+    handleScrollableTouchEnd(handleAchievementsAction);
   }
 }
 
@@ -68,6 +125,22 @@ function handleEditorTouch(tx, ty) {
 }
 
 function handleGameTouch(tx, ty) {
+  if (G.clearSummary && G.btnRects.summaryNext && hitTest(tx, ty, G.btnRects.summaryNext)) {
+    game.nextLevel();
+    return;
+  }
+  if (G.clearSummary && G.btnRects.summaryShare && hitTest(tx, ty, G.btnRects.summaryShare)) {
+    game.prepareShareFromSummary();
+    return;
+  }
+  if (G.clearSummary && G.btnRects.summaryHome && hitTest(tx, ty, G.btnRects.summaryHome)) {
+    G.clearSummary = null;
+    G.currentScreen = 'home';
+    G.markDirty();
+    return;
+  }
+  if (G.clearSummary) return;
+
   if (G.btnRects.homeBtn && hitTest(tx, ty, G.btnRects.homeBtn)) {
     game.goHome();
     return;
@@ -117,7 +190,11 @@ function handleHomeAction(action) {
     case 'goAdvModes': G.currentScreen = 'adv-modes'; G.markDirty(); break;
     case 'startDaily': game.startGame('daily'); break;
     case 'startEndless': game.startGame('endless'); break;
-    case 'goAchievements': G.currentScreen = 'achievements'; G.markDirty(); break;
+    case 'goAchievements':
+      resetScreenScroll('achievements');
+      G.currentScreen = 'achievements';
+      G.markDirty();
+      break;
     case 'goThemes': G.currentScreen = 'themes'; G.markDirty(); break;
     case 'goLeaderboard': G.currentScreen = 'leaderboard'; G.markDirty(); break;
     case 'goEditor':
@@ -130,14 +207,27 @@ function handleHomeAction(action) {
   }
 }
 
+function startAdvMechanic(mech) {
+  if (!G.playerStats.mechTutorialCleared) G.playerStats.mechTutorialCleared = {};
+  if (!G.playerStats.mechTutorialCleared[mech]) {
+    game.startMechTutorial(mech);
+  } else {
+    game.startAdvancedMode(mech);
+  }
+}
+
 function handleAdvModesAction(action) {
   switch (action) {
     case 'goIceMenu': G.currentScreen = 'adv-ice-menu'; G.markDirty(); break;
-    case 'startPortalMode': G.advModePreference = 'portal'; game.startGame('advanced'); break;
-    case 'startMirrorMode': G.advModePreference = 'mirror'; game.startGame('advanced'); break;
-    case 'startBombMode': G.advModePreference = 'bomb'; game.startGame('advanced'); break;
-    case 'startStarMode': G.advModePreference = 'star'; game.startGame('advanced'); break;
-    case 'goHome': G.currentScreen = 'home'; G.markDirty(); break;
+    case 'startPortalMode': startAdvMechanic('portal'); break;
+    case 'startMirrorMode': startAdvMechanic('mirror'); break;
+    case 'startBombMode': startAdvMechanic('bomb'); break;
+    case 'startStarMode': startAdvMechanic('star'); break;
+    case 'goHome':
+      G.currentScreen = 'home';
+      resetScreenScroll('home');
+      G.markDirty();
+      break;
   }
 }
 
@@ -151,7 +241,11 @@ function handleIceMenuAction(action) {
 
 function handleAchievementsAction(action) {
   switch (action) {
-    case 'goHome': G.currentScreen = 'home'; G.markDirty(); break;
+    case 'goHome':
+      resetScreenScroll('home');
+      G.currentScreen = 'home';
+      G.markDirty();
+      break;
   }
 }
 
@@ -213,7 +307,7 @@ function handleComingSoonAction(action) {
 
 function checkThemeUnlocks() {
   var s = G.playerStats;
-  var totalCleared = s.normalClearedCount + s.advClearedCount;
+  var totalCleared = s.lifetimeNormalCleared + s.lifetimeAdvCleared;
   var changed = false;
 
   if (totalCleared >= 10 && s.unlockedThemes.indexOf('spring') === -1) {
@@ -285,9 +379,15 @@ function gameLoop() {
 
 function start() {
   wx.onTouchStart(handleTouchStart);
+  wx.onTouchMove(handleTouchMove);
+  wx.onTouchEnd(handleTouchEnd);
 
   wx.onShareAppMessage(function() {
-    var total = G.playerStats.normalClearedCount + G.playerStats.advClearedCount;
+    if (G._pendingShare && G._shareTitle) {
+      G._pendingShare = false;
+      return { title: G._shareTitle, imageUrl: '' };
+    }
+    var total = G.playerStats.lifetimeNormalCleared + G.playerStats.lifetimeAdvCleared;
     return {
       title: '我在「跳跃填色」已通关 ' + total + ' 关，获得 ' + G.playerStats.totalStars + ' 颗星，快来挑战吧！',
       imageUrl: ''

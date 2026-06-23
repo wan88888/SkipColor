@@ -4,6 +4,8 @@ var achievements = require('./achievements.js');
 var leaderboard = require('./leaderboard.js');
 var editor = require('./editor.js');
 var daily = require('./daily.js');
+var levelpack = require('./levelpack.js');
+var scroll = require('./scroll.js');
 var C = G.CONFIG;
 
 function drawScreenBase(title, subtitle) {
@@ -28,16 +30,17 @@ function drawScreenBase(title, subtitle) {
   return { ctx: ctx, W: W, H: H, cx: cx, y: y };
 }
 
-function drawButtonList(items, startY) {
+function drawButtonList(items, startY, storeButtons) {
   var ctx = G.ctx;
   var W = G.W;
-  var cx = W / 2;
   var btnW = W - 40;
   var btnH = 60;
   var btnX = 20;
   var y = startY;
 
-  G.screenButtons = [];
+  if (storeButtons !== false) {
+    G.screenButtons = [];
+  }
 
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
@@ -58,7 +61,6 @@ function drawButtonList(items, startY) {
 function drawBackButton(label, y, action) {
   var ctx = G.ctx;
   var W = G.W;
-  var cx = W / 2;
   var btnW = W - 40;
   var btnH = 60;
   var btnX = 20;
@@ -72,45 +74,70 @@ function drawBackButton(label, y, action) {
 
 var screenHome = {
   draw: function() {
-    var base = drawScreenBase('跳跃填色', null);
-    var ctx = base.ctx;
-    var W = base.W;
-    var cx = base.cx;
-    var y = base.y;
+    var ctx = G.ctx;
+    var W = G.W;
+    var cx = W / 2;
 
-    var totalDaily = G.playerStats.normalClearedCount + G.playerStats.advClearedCount;
-    draw.drawText(ctx, '今日通关 ' + totalDaily + ' 关  ⭐ ' + G.playerStats.totalStars, cx, y, 15, C.textSub, 'center');
-    y += 50;
+    ctx.fillStyle = C.bgColor;
+    ctx.fillRect(0, 0, W, G.H);
+
+    draw.drawText(ctx, '跳跃填色', cx, 60, 36, C.textMain, 'center', true);
+    var totalDaily = G.playerStats.todayNormalCleared + G.playerStats.todayAdvCleared;
+    var progressText = '今日通关 ' + totalDaily + ' 关  ⭐ ' + G.playerStats.totalStars;
+    if (G.playerStats.lifetimeNormalCleared < levelpack.NORMAL_LEVEL_COUNT) {
+      progressText += '  ·  精编 ' + (G.playerStats.lifetimeNormalCleared + 1) + '/' + levelpack.NORMAL_LEVEL_COUNT;
+    }
+    draw.drawText(ctx, progressText, cx, 95, 14, C.textSub, 'center');
+
+    G.screenButtons = [];
+    scroll.beginDraw(ctx, 'home');
+    var y = 10;
+
+    var normalSub = G.playerStats.tutorialCleared ? '▶' : '🔒';
+    if (G.playerStats.tutorialCleared && G.playerStats.lifetimeNormalCleared < levelpack.NORMAL_LEVEL_COUNT) {
+      normalSub = '第' + (G.playerStats.lifetimeNormalCleared + 1) + '关';
+    }
 
     var items = [
       { label: '📖 基础教学', sub: '▶', action: 'startTutorial' },
-      { label: '🎮 普通关卡', sub: G.playerStats.tutorialCleared ? '▶' : '🔒', action: G.playerStats.tutorialCleared ? 'startNormal' : null, disabled: !G.playerStats.tutorialCleared },
-      { label: '🔥 进阶关卡', sub: G.playerStats.normalClearedCount > 0 ? '▶' : '🔒', action: G.playerStats.normalClearedCount > 0 ? 'goAdvModes' : null, disabled: G.playerStats.normalClearedCount === 0 },
+      { label: '🎮 普通关卡', sub: normalSub, action: G.playerStats.tutorialCleared ? 'startNormal' : null, disabled: !G.playerStats.tutorialCleared },
+      { label: '🔥 进阶关卡', sub: G.playerStats.lifetimeNormalCleared > 0 ? '▶' : '🔒', action: G.playerStats.lifetimeNormalCleared > 0 ? 'goAdvModes' : null, disabled: G.playerStats.lifetimeNormalCleared === 0 },
       { label: '📅 每日挑战', sub: daily.isDailyClearedToday() ? '✓今日' : '▶', action: 'startDaily' },
       { label: '♾️ 无尽模式', sub: '最高:' + G.playerStats.endlessHighScore, action: 'startEndless' },
       { label: '🏆 成就', sub: achievements.getProgress().unlocked + '/' + achievements.getProgress().total, action: 'goAchievements' },
       { label: '🎨 主题', sub: G.THEMES[G.currentTheme].name, action: 'goThemes' },
-      { label: '📊 排行榜', sub: '▶', action: 'goLeaderboard' },
       { label: '🛠️ 关卡编辑器', sub: '▶', action: 'goEditor' }
     ];
+    if (G.FEATURES.leaderboard) {
+      items.splice(7, 0, { label: '📊 排行榜', sub: '▶', action: 'goLeaderboard' });
+    }
     y = drawButtonList(items, y);
 
     y += 10;
-    var toggleW = (W - 50) / 3;
-    var soundLabel = G.settings.soundEnabled ? '🔊音效' : '🔇音效';
+    var toggleCount = G.FEATURES.sound ? 3 : 2;
+    var toggleW = (W - 50) / toggleCount;
+    var toggleX = 20;
+    if (G.FEATURES.sound) {
+      var soundLabel = G.settings.soundEnabled ? '🔊音效' : '🔇音效';
+      G.screenButtons.push({ x: toggleX, y: y, w: toggleW, h: 30, action: 'toggleSound' });
+      draw.drawText(ctx, soundLabel, toggleX + toggleW / 2, y + 15, 12, C.textSub, 'center');
+      toggleX += toggleW + 5;
+    }
     var vibLabel = G.settings.vibrationEnabled ? '📳振动' : '📴振动';
     var particleLabel = G.settings.particleEnabled ? '✨特效' : '⚪特效';
-    G.screenButtons.push({ x: 20, y: y, w: toggleW, h: 30, action: 'toggleSound' });
-    draw.drawText(ctx, soundLabel, 20 + toggleW / 2, y + 15, 12, C.textSub, 'center');
-    G.screenButtons.push({ x: 25 + toggleW, y: y, w: toggleW, h: 30, action: 'toggleVibration' });
-    draw.drawText(ctx, vibLabel, 25 + toggleW + toggleW / 2, y + 15, 12, C.textSub, 'center');
-    G.screenButtons.push({ x: 30 + toggleW * 2, y: y, w: toggleW, h: 30, action: 'toggleParticle' });
-    draw.drawText(ctx, particleLabel, 30 + toggleW * 2 + toggleW / 2, y + 15, 12, C.textSub, 'center');
+    G.screenButtons.push({ x: toggleX, y: y, w: toggleW, h: 30, action: 'toggleVibration' });
+    draw.drawText(ctx, vibLabel, toggleX + toggleW / 2, y + 15, 12, C.textSub, 'center');
+    toggleX += toggleW + 5;
+    G.screenButtons.push({ x: toggleX, y: y, w: toggleW, h: 30, action: 'toggleParticle' });
+    draw.drawText(ctx, particleLabel, toggleX + toggleW / 2, y + 15, 12, C.textSub, 'center');
 
     y += 40;
     var clearBtnW = draw.measureText(ctx, '清除游戏进度', 13) + 20;
     G.screenButtons.push({ x: cx - clearBtnW / 2, y: y, w: clearBtnW, h: 30, action: 'clearData' });
     draw.drawText(ctx, '清除游戏进度', cx, y + 15, 13, C.textSub, 'center');
+
+    scroll.setContentHeight('home', y + 50);
+    scroll.endDraw(ctx);
   }
 };
 
@@ -119,12 +146,13 @@ var screenAdvModes = {
     var base = drawScreenBase('进阶模式', '选择您要挑战的特殊机制');
     var y = base.y + 40;
 
+    var mechCleared = G.playerStats.mechTutorialCleared || {};
     var items = [
       { label: '🧊 冰块融化', sub: '▶', action: 'goIceMenu' },
-      { label: '🌀 传送门', sub: '▶', action: 'startPortalMode' },
-      { label: '🪞 镜子反射', sub: '▶', action: 'startMirrorMode' },
-      { label: '💣 炸弹', sub: '▶', action: 'startBombMode' },
-      { label: '⭐ 收集星星', sub: '▶', action: 'startStarMode' }
+      { label: '🌀 传送门', sub: mechCleared.portal ? '▶' : '📖', action: 'startPortalMode' },
+      { label: '🪞 镜子反射', sub: mechCleared.mirror ? '▶' : '📖', action: 'startMirrorMode' },
+      { label: '💣 炸弹', sub: mechCleared.bomb ? '▶' : '📖', action: 'startBombMode' },
+      { label: '⭐ 收集星星', sub: mechCleared.star ? '▶' : '📖', action: 'startStarMode' }
     ];
     y = drawButtonList(items, y);
 
@@ -149,12 +177,20 @@ var screenIceMenu = {
 
 var screenAchievements = {
   draw: function() {
-    var base = drawScreenBase('成就', achievements.getProgress().unlocked + '/' + achievements.getProgress().total + ' 已解锁');
-    var ctx = base.ctx;
-    var W = base.W;
-    var y = base.y + 30;
+    var ctx = G.ctx;
+    var W = G.W;
+    var cx = W / 2;
+
+    ctx.fillStyle = C.bgColor;
+    ctx.fillRect(0, 0, W, G.H);
+
+    draw.drawText(ctx, '成就', cx, 60, 36, C.textMain, 'center', true);
+    draw.drawText(ctx, achievements.getProgress().unlocked + '/' + achievements.getProgress().total + ' 已解锁', cx, 95, 15, C.textSub, 'center');
 
     G.screenButtons = [];
+    scroll.beginDraw(ctx, 'achievements');
+    var y = 10;
+
     var list = achievements.getList();
     var itemH = 70;
     var itemW = W - 40;
@@ -178,7 +214,9 @@ var screenAchievements = {
       y += itemH + 10;
     }
 
-    drawBackButton('返回主页', y, 'goHome');
+    y = drawBackButton('返回主页', y, 'goHome');
+    scroll.setContentHeight('achievements', y + 20);
+    scroll.endDraw(ctx);
   }
 };
 
@@ -353,9 +391,6 @@ var screenEditor = {
         } else if (val === -8) {
           cellColor = '#ffd700';
           cellText = '⭐';
-        } else if (val === -9) {
-          cellColor = '#d8dce0';
-          cellText = '🚫';
         } else if (val >= 10 && val < 20) {
           cellColor = C.cellNumber;
           cellText = '' + (val - 10);

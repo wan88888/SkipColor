@@ -1,5 +1,6 @@
 var G = GameGlobal;
 var C = G.CONFIG;
+var beam = require('./beam.js');
 
 function makeCell(val, r, c) {
   var cellObj = { type: 'void', value: 0, used: false, r: r, c: c, animState: null };
@@ -23,20 +24,8 @@ function makeCell(val, r, c) {
     cellObj.type = 'bomb'; cellObj.bombRadius = 1;
   } else if (val === -8) {
     cellObj.type = 'empty'; cellObj.isStar = true;
-  } else if (val === -9) {
-    cellObj.type = 'empty'; cellObj.isProtected = true;
-  } else if (val === -10) {
-    cellObj.type = 'ice'; cellObj.hp = 1; cellObj.timer = 3;
   } else if (val >= 10 && val < 20) {
     cellObj.type = 'number'; cellObj.value = val - 10;
-  } else if (val >= 20 && val < 30) {
-    cellObj.type = 'number'; cellObj.value = val - 20; cellObj.color = 'red';
-  } else if (val >= 30 && val < 40) {
-    cellObj.type = 'number'; cellObj.value = val - 30; cellObj.color = 'blue';
-  } else if (val >= 40 && val < 50) {
-    cellObj.type = 'number'; cellObj.value = val - 40; cellObj.chainId = 1;
-  } else if (val >= 50 && val < 60) {
-    cellObj.type = 'number'; cellObj.value = -(val - 50); cellObj.isNegative = true;
   }
   return cellObj;
 }
@@ -91,7 +80,31 @@ function loadGridData(matrix) {
   G.stars = [];
   G.protectedCells = [];
   G.requiredPath = [];
+  for (var sr = 0; sr < G.ROWS; sr++) {
+    for (var sc = 0; sc < G.COLS; sc++) {
+      if (grid[sr][sc].isStar) {
+        G.stars.push({ r: sr, c: sc, collected: false });
+      }
+    }
+  }
   G.markDirty();
+}
+
+function loadFixedLevel(levelData) {
+  G.currentSolution = levelData.solution.map(function(s) {
+    return { r: s.r, c: s.c, val: s.val, dir: s.dir };
+  });
+  G.requireStars = !!levelData.requireStars;
+  if (levelData.difficulty) {
+    G.difficulty = levelData.difficulty;
+    if (levelData.difficulty === 'EASY') G.difficultyColor = C.diffEasy;
+    else if (levelData.difficulty === 'MEDIUM') G.difficultyColor = C.diffMedium;
+    else if (levelData.difficulty === 'HARD') G.difficultyColor = C.diffHard;
+    else G.difficulty = '';
+  } else {
+    G.difficulty = '';
+  }
+  loadGridData(levelData.matrix);
 }
 
 function loadFromMatrix(matrix) {
@@ -99,7 +112,31 @@ function loadFromMatrix(matrix) {
   loadGridData(matrix);
 }
 
+function copySolution(solution) {
+  return solution.map(function(s) {
+    var copy = { r: s.r, c: s.c, val: s.val, dir: s.dir };
+    if (s.foundVoids) {
+      copy.foundVoids = s.foundVoids.map(function(v) {
+        return { r: v.r, c: v.c };
+      });
+    }
+    return copy;
+  });
+}
+
+function validateSolutionOnGrid(grid, solution) {
+  return beam.validateSolutionOnGrid(grid, solution, G.cloneGrid);
+}
+
 function generateRandom(difficulty) {
+  var maxAttempts = 8;
+  for (var attempt = 0; attempt < maxAttempts; attempt++) {
+    if (buildRandomLevel(difficulty, false)) return;
+  }
+  buildRandomLevel(difficulty, true);
+}
+
+function buildRandomLevel(difficulty, skipSpecial) {
   var SIM_SIZE = 8;
   var simGrid = [];
   for (var i = 0; i < SIM_SIZE; i++) {
@@ -230,7 +267,27 @@ function generateRandom(difficulty) {
   loadGridData(croppedGrid);
   var useIce = (G.currentMode === 'advanced' || G.currentMode === 'endless');
   if (useIce && difficulty >= 2) applyIceObstacles();
-  applySpecialObstacles(difficulty);
+  if (!validateSolutionOnGrid(G.gridData, G.currentSolution)) return false;
+
+  if (!skipSpecial) {
+    var snapshot = {
+      grid: G.cloneGrid(G.gridData),
+      solution: copySolution(G.currentSolution),
+      stars: (G.stars || []).slice()
+    };
+    applySpecialObstacles(difficulty);
+    if (!validateSolutionOnGrid(G.gridData, G.currentSolution)) {
+      G.gridData = snapshot.grid;
+      G.initialGridData = G.cloneGrid(G.gridData);
+      G.currentSolution = snapshot.solution;
+      G.stars = snapshot.stars;
+      attachSeqNumbers(G.gridData, G.currentSolution);
+    }
+  }
+
+  G.initialGridData = G.cloneGrid(G.gridData);
+  G.markDirty();
+  return validateSolutionOnGrid(G.gridData, G.currentSolution);
 }
 
 function generateAndCropLevel() {
@@ -416,10 +473,13 @@ function applyIceObstacles() {
 module.exports = {
   loadGridData: loadGridData,
   loadFromMatrix: loadFromMatrix,
+  loadFixedLevel: loadFixedLevel,
   generateAndCropLevel: generateAndCropLevel,
   generateRandom: generateRandom,
+  buildRandomLevel: buildRandomLevel,
   getAttackerCandidates: getAttackerCandidates,
   applyIceObstacles: applyIceObstacles,
   applySpecialObstacles: applySpecialObstacles,
+  validateSolutionOnGrid: validateSolutionOnGrid,
   makeCell: makeCell
 };

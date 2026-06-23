@@ -9,8 +9,8 @@ function init() {
         KVDataList: [{
           key: KV_KEY,
           value: JSON.stringify({
-            normalCleared: G.playerStats.normalClearedCount,
-            advCleared: G.playerStats.advClearedCount,
+            normalCleared: G.playerStats.lifetimeNormalCleared,
+            advCleared: G.playerStats.lifetimeAdvCleared,
             totalStars: G.playerStats.totalStars,
             endlessHigh: G.playerStats.endlessHighScore
           })

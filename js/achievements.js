@@ -27,11 +27,11 @@ function unlock(id) {
 
 function check(context) {
   var s = G.playerStats;
-  if (s.normalClearedCount + s.advClearedCount > 0) unlock('firstClear');
+  if (s.lifetimeNormalCleared + s.lifetimeAdvCleared > 0) unlock('firstClear');
   if (s.totalIceBroken >= 100) unlock('ice100');
   if (context.clearTime && context.clearTime < 10000) unlock('speed10');
   if (s.perfectStreak >= 5) unlock('perfect5');
-  if (s.normalClearedCount >= 50) unlock('master50');
+  if (s.lifetimeNormalCleared >= 50) unlock('master50');
   if (s.totalStars >= 50) unlock('star50');
   if (s.endlessHighScore >= 100) unlock('endless100');
   if (s.dailyClearedCount >= 7) unlock('daily7');

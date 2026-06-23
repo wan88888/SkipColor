@@ -3,6 +3,8 @@ var draw = require('./draw.js');
 var game = require('./game.js');
 var particles = require('./particles.js');
 var endless = require('./endless.js');
+var levelpack = require('./levelpack.js');
+var rating = require('./rating.js');
 var C = G.CONFIG;
 
 function calcCellSize() {
@@ -56,6 +58,9 @@ function drawGameScreen() {
   } else if (G.currentMode === 'adv-tutorial') {
     var atIdx = Math.min(G.levelIndex, G.advTutorials.length - 1);
     titleText = G.advTutorials[atIdx].title;
+  } else if (G.currentMode === 'mech-tutorial') {
+    var mechData = levelpack.getMechTutorial(G.advMechanic, G.levelIndex);
+    titleText = mechData ? mechData.title : '机制教学';
   } else if (G.currentMode === 'advanced') {
     titleText = '正式关卡';
   } else if (G.currentMode === 'daily') {
@@ -107,12 +112,14 @@ function drawGameScreen() {
 
   y += homeBtnR * 2 + 10;
 
-  if (G.currentMode === 'tutorial' || G.currentMode === 'adv-tutorial') {
+  if (G.currentMode === 'tutorial' || G.currentMode === 'adv-tutorial' || G.currentMode === 'mech-tutorial') {
     var tData = null;
     if (G.currentMode === 'tutorial' && G.levelIndex < G.tutorials.length) {
       tData = G.tutorials[G.levelIndex];
     } else if (G.currentMode === 'adv-tutorial' && G.levelIndex < G.advTutorials.length) {
       tData = G.advTutorials[G.levelIndex];
+    } else if (G.currentMode === 'mech-tutorial') {
+      tData = levelpack.getMechTutorial(G.advMechanic, G.levelIndex);
     }
     if (tData) {
       var lines = draw.wrapText(ctx, tData.text, W - 40, 18, 14);
@@ -148,11 +155,6 @@ function drawGameScreen() {
           if (cellData.isStar) {
             draw.drawText(ctx, '⭐', cx_c, cy_c, 16, '#ffd700', 'center');
           }
-          if (cellData.isProtected) {
-            ctx.strokeStyle = C.accentColor;
-            ctx.lineWidth = 2;
-            ctx.strokeRect(rect.x + 2, rect.y + 2, rect.w - 4, rect.h - 4);
-          }
         } else if (cellData.type === 'filled') {
           var scale = cellData.animState === 'pop' ? 0.95 : 1;
           var fw = rect.w * scale, fh = rect.h * scale;
@@ -164,8 +166,6 @@ function drawGameScreen() {
             ctx.globalAlpha = 0.3;
           }
           var numColor = C.cellNumber;
-          if (cellData.color === 'red') numColor = '#e04040';
-          else if (cellData.color === 'blue') numColor = '#4080e0';
 
           if (G.selectedCell && G.selectedCell.r === r && G.selectedCell.c === c) {
             draw.drawRoundRect(ctx, rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6, 10, numColor);
@@ -175,14 +175,8 @@ function drawGameScreen() {
           } else {
             draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, numColor);
           }
-          var displayVal = cellData.isNegative ? Math.abs(cellData.value) : cellData.value;
-          var prefix = cellData.isNegative ? '-' : '';
-          draw.drawText(ctx, prefix + displayVal, cx_c, cy_c, 20, '#ffffff', 'center', true);
+          draw.drawText(ctx, '' + cellData.value, cx_c, cy_c, 20, '#ffffff', 'center', true);
           ctx.globalAlpha = 1;
-
-          if (cellData.chainId) {
-            draw.drawText(ctx, '🔗', rect.x + 6, rect.y + 6, 10, C.textSub, 'left');
-          }
 
           if (G.isHintVisible && cellData.seq) {
             var badgeR = 9;
@@ -203,9 +197,6 @@ function drawGameScreen() {
             draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, iceColor);
           }
           draw.drawText(ctx, '' + cellData.hp, cx_c, cy_c, 20, '#ffffff', 'center', true);
-          if (cellData.timer) {
-            draw.drawText(ctx, '⏳' + cellData.timer, rect.x + rect.w / 2, rect.y + rect.h - 4, 8, C.accentColor, 'center');
-          }
         } else if (cellData.type === 'portal') {
           draw.drawRoundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10, C.cardBg);
           ctx.strokeStyle = C.accentColor;
@@ -347,6 +338,61 @@ function drawGameScreen() {
 
   particles.update();
   particles.render(ctx);
+
+  if (G.clearSummary) {
+    drawClearSummary(ctx, W, H);
+  }
+}
+
+function drawClearSummary(ctx, W, H) {
+  var s = G.clearSummary;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, W, H);
+
+  var panelW = W - 50;
+  var panelH = 320;
+  var panelX = 25;
+  var panelY = (H - panelH) / 2;
+  draw.drawShadowBox(ctx, panelX, panelY, panelW, panelH, C.radiusLg, C.cardBg);
+
+  var cx = W / 2;
+  var y = panelY + 36;
+  draw.drawText(ctx, '🎉 通关！', cx, y, 24, C.textMain, 'center', true);
+  y += 40;
+
+  var starText = rating.showStars(s.stars);
+  draw.drawText(ctx, starText, cx, y, 28, '#ffd700', 'center', true);
+  y += 36;
+
+  var timeSec = Math.max(1, Math.round(s.clearTime / 1000));
+  draw.drawText(ctx, '步数 ' + s.moveCount + ' / 最优 ' + s.optimalMoves, cx, y, 14, C.textSub, 'center');
+  y += 22;
+  draw.drawText(ctx, '用时 ' + timeSec + ' 秒', cx, y, 14, C.textSub, 'center');
+  if (s.undoCount > 0) {
+    y += 22;
+    draw.drawText(ctx, '撤销 ' + s.undoCount + ' 次', cx, y, 13, C.textSub, 'center');
+  }
+
+  y = panelY + panelH - 130;
+  var btnW = panelW - 40;
+  var btnH = 44;
+  var btnX = panelX + 20;
+  var nextLabel = G.currentMode === 'daily' ? '完成' : '下一关';
+
+  draw.drawRoundRect(ctx, btnX, y, btnW, btnH, 22, C.cellFilled);
+  draw.drawText(ctx, nextLabel, btnX + btnW / 2, y + btnH / 2, 16, '#ffffff', 'center', true);
+  G.btnRects.summaryNext = { x: btnX, y: y, w: btnW, h: btnH };
+
+  y += btnH + 10;
+  var halfW = (btnW - 10) / 2;
+  draw.drawRoundRect(ctx, btnX, y, halfW, btnH, 22, C.cellNumber);
+  draw.drawText(ctx, '📤 分享', btnX + halfW / 2, y + btnH / 2, 14, '#ffffff', 'center', true);
+  G.btnRects.summaryShare = { x: btnX, y: y, w: halfW, h: btnH };
+
+  var homeX = btnX + halfW + 10;
+  draw.drawRoundRect(ctx, homeX, y, halfW, btnH, 22, C.cellEmpty);
+  draw.drawText(ctx, '🏠 主页', homeX + halfW / 2, y + btnH / 2, 14, C.textMain, 'center', true);
+  G.btnRects.summaryHome = { x: homeX, y: y, w: halfW, h: btnH };
 }
 
 module.exports = {
